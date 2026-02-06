@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useTheme } from '@/contexts/ThemeContext';
 import { BlurView } from 'expo-blur';
+import { Typography } from '@/constants/Theme';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -15,9 +16,8 @@ export default function TabLayout() {
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
 
-  // Calculate safe bottom padding - ensure minimum 20px gap for that floating feel
   const bottomPadding = Math.max(insets.bottom, 20);
-  const tabBarHeight = 70; // Base tab bar height
+  const tabBarHeight = 72;
   const totalHeight = tabBarHeight + bottomPadding;
 
   return (
@@ -26,8 +26,8 @@ export default function TabLayout() {
       <Tabs
         screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: isDark ? Colors.electricTeal : Colors.electricTeal,
-        tabBarInactiveTintColor: isDark ? 'rgba(156, 163, 175, 0.6)' : Colors.mediumGray,
+        tabBarActiveTintColor: Colors.electricTeal,
+        tabBarInactiveTintColor: isDark ? 'rgba(139, 146, 160, 0.5)' : Colors.tertiaryText,
         tabBarBackground: () =>
           isDark ? (
             <View style={StyleSheet.absoluteFill}>
@@ -40,9 +40,9 @@ export default function TabLayout() {
                 style={[
                   StyleSheet.absoluteFill,
                   {
-                    backgroundColor: 'rgba(10, 6, 18, 0.75)',
+                    backgroundColor: 'rgba(10, 6, 18, 0.82)',
                     borderTopWidth: 1,
-                    borderTopColor: 'rgba(45, 212, 191, 0.15)',
+                    borderTopColor: 'rgba(255, 255, 255, 0.06)',
                   },
                 ]}
               />
@@ -54,11 +54,11 @@ export default function TabLayout() {
           borderTopWidth: isDark ? 0 : 1,
           paddingBottom: bottomPadding,
           height: totalHeight,
-          paddingTop: 12,
-          shadowColor: isDark ? '#2DD4BF' : '#000',
-          shadowOffset: { width: 0, height: isDark ? -4 : -2 },
-          shadowOpacity: isDark ? 0.15 : 0.06,
-          shadowRadius: isDark ? 16 : 8,
+          paddingTop: 10,
+          shadowColor: isDark ? 'rgba(45, 212, 191, 0.06)' : 'rgba(0, 0, 0, 0.04)',
+          shadowOffset: { width: 0, height: isDark ? -2 : -1 },
+          shadowOpacity: 1,
+          shadowRadius: isDark ? 20 : 12,
           elevation: isDark ? 12 : 8,
           position: isDark ? 'absolute' : 'relative' as const,
           ...(isDark && {
@@ -68,9 +68,10 @@ export default function TabLayout() {
           }),
         },
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-          marginBottom: 4,
+          fontSize: Typography.labelSmall.fontSize,
+          fontWeight: Typography.labelSmall.fontWeight,
+          letterSpacing: Typography.labelSmall.letterSpacing,
+          marginTop: 2,
         },
       }}
     >
@@ -80,7 +81,7 @@ export default function TabLayout() {
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
             <View style={focused && isDark ? styles.activeIconGlow : undefined}>
-              <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+              <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
             </View>
           ),
         }}
@@ -91,7 +92,7 @@ export default function TabLayout() {
           title: 'Savings',
           tabBarIcon: ({ color, focused }) => (
             <View style={focused && isDark ? styles.activeIconGlow : undefined}>
-              <Ionicons name={focused ? 'wallet' : 'wallet-outline'} size={24} color={color} />
+              <Ionicons name={focused ? 'wallet' : 'wallet-outline'} size={22} color={color} />
             </View>
           ),
         }}
@@ -102,7 +103,7 @@ export default function TabLayout() {
           title: 'Invest',
           tabBarIcon: ({ color, focused }) => (
             <View style={focused && isDark ? styles.activeIconGlow : undefined}>
-              <Ionicons name={focused ? 'trending-up' : 'trending-up-outline'} size={24} color={color} />
+              <Ionicons name={focused ? 'trending-up' : 'trending-up-outline'} size={22} color={color} />
             </View>
           ),
         }}
@@ -113,7 +114,7 @@ export default function TabLayout() {
           title: 'Coach',
           tabBarIcon: ({ color, focused }) => (
             <View style={focused && isDark ? styles.activeIconGlow : undefined}>
-              <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={24} color={color} />
+              <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={color} />
             </View>
           ),
         }}
@@ -124,7 +125,7 @@ export default function TabLayout() {
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
             <View style={focused && isDark ? styles.activeIconGlow : undefined}>
-              <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
+              <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
             </View>
           ),
         }}
@@ -139,8 +140,8 @@ const styles = StyleSheet.create({
   activeIconGlow: {
     shadowColor: '#2DD4BF',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
     elevation: 6,
   },
 });

@@ -1,23 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   TextInput,
   Modal,
   Alert,
   Animated,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getThemeColors, getGradients } from '@/constants/Colors';
+import { Typography, Spacing, BorderRadius } from '@/constants/Theme';
 import { GlassCard } from '@/components/GlassCard';
+import { PressableScale } from '@/components/PressableScale';
 import { Ionicons } from '@expo/vector-icons';
 import { storage } from '@/utils/storage';
 import { useAuth } from '@fastshot/auth';
 import { useTheme } from '@/contexts/ThemeContext';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Milestone {
   id: string;
@@ -46,26 +49,43 @@ export default function ProfileScreen() {
   const [isRecalculating, setIsRecalculating] = useState(false);
   const { signOut, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const insets = useSafeAreaInsets();
 
-  const Colors = getThemeColors(theme === 'dark');
-  const Gradients = getGradients(theme === 'dark');
+  const isDark = theme === 'dark';
+  const Colors = getThemeColors(isDark);
+  const Gradients = getGradients(isDark);
 
-  const recalculateAnim = new Animated.Value(0);
+  const recalculateAnim = useRef(new Animated.Value(0)).current;
+  const toggleAnim = useRef(new Animated.Value(theme === 'dark' ? 1 : 0)).current;
 
   useEffect(() => {
     loadData();
   }, []);
 
+  useEffect(() => {
+    Animated.timing(toggleAnim, {
+      toValue: isDark ? 1 : 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [isDark]);
+
   const loadData = async () => {
-    const user = await storage.getUserData();
-    const financial = await storage.getFinancialData();
-    setUserData(user);
-    setFinancialData(financial);
-    if (financial) {
-      setEditIncome(financial.monthlyIncome?.toString() || '');
-      setEditSavingsGoal(financial.savingsGoal?.toString() || '');
+    try {
+      const user = await storage.getUserData();
+      const financial = await storage.getFinancialData();
+      setUserData(user);
+      setFinancialData(financial);
+      if (financial) {
+        setEditIncome(financial.monthlyIncome?.toString() || '');
+        setEditSavingsGoal(financial.savingsGoal?.toString() || '');
+      }
+    } catch (error) {
+      console.error('Failed to load profile data:', error);
     }
   };
+
+  const currency = financialData?.currency || '£';
 
   const handleEditBlueprint = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -95,7 +115,6 @@ export default function ProfileScreen() {
       setIsRecalculating(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Trigger recalculating animation
       Animated.sequence([
         Animated.timing(recalculateAnim, {
           toValue: 1,
@@ -142,182 +161,530 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleSignOut = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    signOut();
+  };
+
+  const toggleTranslateX = toggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [2, 26],
+  });
+
+  const toggleTrackColor = toggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [
+      isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+      isDark ? 'rgba(168,85,247,0.4)' : 'rgba(20,184,166,0.3)',
+    ],
+  });
+
+  const unlockedCount = MILESTONES.filter((m) => m.unlocked).length;
+
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + Spacing.md, paddingBottom: 140 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header with Theme Toggle */}
         <View style={styles.header}>
           <View>
-            <Text style={[styles.title, { color: Colors.primaryText }]}>Your Journey</Text>
-            <Text style={[styles.subtitle, { color: Colors.electricTeal }]}>Legacy Map</Text>
+            <Text style={[Typography.headlineLarge, { color: Colors.primaryText }]}>
+              Your Journey
+            </Text>
+            <Text
+              style={[
+                Typography.titleSmall,
+                { color: Colors.electricTeal, marginTop: Spacing.xs },
+              ]}
+            >
+              Legacy Map
+            </Text>
           </View>
-          <TouchableOpacity
-            style={[styles.themeToggle, { backgroundColor: Colors.cardBackground, borderColor: Colors.glassBorder }]}
-            onPress={toggleTheme}
-          >
-            <Ionicons
-              name={theme === 'dark' ? 'moon' : 'sunny'}
-              size={24}
-              color={theme === 'dark' ? Colors.amethyst : Colors.sunKissedAmber}
-            />
-          </TouchableOpacity>
+
+          {/* Premium Pill-Shaped Theme Toggle */}
+          <PressableScale onPress={toggleTheme} scaleValue={0.92}>
+            <Animated.View
+              style={[
+                styles.themeTogglePill,
+                {
+                  backgroundColor: toggleTrackColor,
+                  borderColor: isDark ? 'rgba(168,85,247,0.25)' : 'rgba(0,0,0,0.06)',
+                  ...Platform.select({
+                    ios: {
+                      shadowColor: isDark ? '#A855F7' : '#14B8A6',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: isDark ? 0.3 : 0.15,
+                      shadowRadius: 8,
+                    },
+                    android: { elevation: 4 },
+                  }),
+                },
+              ]}
+            >
+              <Animated.View
+                style={[
+                  styles.themeToggleKnob,
+                  {
+                    transform: [{ translateX: toggleTranslateX }],
+                    backgroundColor: isDark ? '#A855F7' : '#14B8A6',
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={isDark ? 'moon' : 'sunny'}
+                  size={14}
+                  color="#FFFFFF"
+                />
+              </Animated.View>
+            </Animated.View>
+          </PressableScale>
         </View>
 
         {/* Profile Card */}
-        <GlassCard style={styles.profileCard}>
+        <GlassCard animated delay={0} style={{ marginBottom: Spacing.lg }}>
           <View style={styles.profileHeader}>
-            <View style={styles.avatarLarge}>
-              {userData?.avatarUrl && userData.avatarUrl.startsWith('http') ? (
-                <LinearGradient
-                  colors={Gradients.hero}
-                  style={styles.avatarGradient}
+            {/* Premium Avatar with Gradient Ring */}
+            <View style={styles.avatarRingOuter}>
+              <LinearGradient
+                colors={Gradients.hero}
+                style={styles.avatarGradientRing}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <View
+                  style={[
+                    styles.avatarInner,
+                    { backgroundColor: Colors.cardBackground },
+                  ]}
                 >
-                  <Text style={styles.avatarText}>
-                    {userData?.name?.charAt(0) || 'M'}
-                  </Text>
-                </LinearGradient>
-              ) : (
-                <View style={[styles.emojiAvatarContainer, { backgroundColor: Colors.lightCream }]}>
-                  <Text style={styles.emojiAvatar}>
-                    {userData?.avatarUrl || '👩'}
-                  </Text>
+                  {userData?.avatarUrl &&
+                  !userData.avatarUrl.startsWith('http') ? (
+                    <View
+                      style={[
+                        styles.emojiAvatarContainer,
+                        { backgroundColor: isDark ? Colors.lightCream : Colors.lightCream },
+                      ]}
+                    >
+                      <Text style={styles.emojiAvatar}>{userData.avatarUrl}</Text>
+                    </View>
+                  ) : (
+                    <LinearGradient
+                      colors={Gradients.hero}
+                      style={styles.avatarGradientFill}
+                    >
+                      <Text style={[styles.avatarInitial, { color: '#FFFFFF' }]}>
+                        {userData?.name?.charAt(0) || 'M'}
+                      </Text>
+                    </LinearGradient>
+                  )}
                 </View>
-              )}
+              </LinearGradient>
             </View>
+
             <View style={styles.profileInfo}>
-              <Text style={[styles.userName, { color: Colors.primaryText }]}>{userData?.name || 'Super Mom'}</Text>
-              <Text style={[styles.userEmail, { color: Colors.secondaryText }]}>{user?.email || 'mom@grit.app'}</Text>
+              <Text
+                style={[Typography.headlineMedium, { color: Colors.primaryText }]}
+                numberOfLines={1}
+              >
+                {userData?.name || 'Super Mom'}
+              </Text>
+              <Text
+                style={[
+                  Typography.bodyMedium,
+                  { color: Colors.silverGrey, marginTop: Spacing.xs },
+                ]}
+                numberOfLines={1}
+              >
+                {user?.email || 'mom@grit.app'}
+              </Text>
             </View>
           </View>
 
-          <View style={[styles.statsContainer, { borderTopColor: Colors.glassBorder }]}>
+          {/* Stats Row */}
+          <View
+            style={[
+              styles.statsContainer,
+              { borderTopColor: Colors.glassBorder },
+            ]}
+          >
+            {/* Streak Stat */}
             <View style={styles.stat}>
-              <Text style={[styles.statValue, { color: Colors.electricTeal }]}>
+              <View
+                style={[
+                  styles.statIconBg,
+                  { backgroundColor: isDark ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.08)' },
+                ]}
+              >
+                <Ionicons name="flame" size={16} color={Colors.sunKissedAmber} />
+              </View>
+              <Text
+                style={[
+                  Typography.headlineMedium,
+                  { color: Colors.electricTeal, marginTop: Spacing.xs },
+                ]}
+              >
                 {financialData?.streakDays || 0}
               </Text>
-              <Text style={[styles.statLabel, { color: Colors.tertiaryText }]}>Day Streak</Text>
-            </View>
-            <View style={[styles.statDivider, { backgroundColor: Colors.glassBorder }]} />
-            <View style={styles.stat}>
-              <Text style={[styles.statValue, { color: Colors.electricTeal }]}>
-                {financialData?.currency || '£'}{financialData?.monthlySavings || 0}
+              <Text style={[Typography.labelSmall, { color: Colors.silverGrey, marginTop: 2 }]}>
+                Day Streak
               </Text>
-              <Text style={[styles.statLabel, { color: Colors.tertiaryText }]}>Saved</Text>
             </View>
+
             <View style={[styles.statDivider, { backgroundColor: Colors.glassBorder }]} />
+
+            {/* Saved Stat */}
             <View style={styles.stat}>
-              <Text style={[styles.statValue, { color: Colors.electricTeal }]}>
-                {MILESTONES.filter((m) => m.unlocked).length}
+              <View
+                style={[
+                  styles.statIconBg,
+                  { backgroundColor: isDark ? 'rgba(45,212,191,0.12)' : 'rgba(20,184,166,0.08)' },
+                ]}
+              >
+                <Ionicons name="wallet" size={16} color={Colors.electricTeal} />
+              </View>
+              <Text
+                style={[
+                  Typography.headlineMedium,
+                  { color: Colors.electricTeal, marginTop: Spacing.xs },
+                ]}
+                numberOfLines={1}
+              >
+                {currency}{financialData?.monthlySavings || 0}
               </Text>
-              <Text style={[styles.statLabel, { color: Colors.tertiaryText }]}>Milestones</Text>
+              <Text style={[Typography.labelSmall, { color: Colors.silverGrey, marginTop: 2 }]}>
+                Saved
+              </Text>
+            </View>
+
+            <View style={[styles.statDivider, { backgroundColor: Colors.glassBorder }]} />
+
+            {/* Milestones Stat */}
+            <View style={styles.stat}>
+              <View
+                style={[
+                  styles.statIconBg,
+                  { backgroundColor: isDark ? 'rgba(168,85,247,0.12)' : 'rgba(168,85,247,0.08)' },
+                ]}
+              >
+                <Ionicons name="trophy" size={16} color={Colors.amethyst} />
+              </View>
+              <Text
+                style={[
+                  Typography.headlineMedium,
+                  { color: Colors.electricTeal, marginTop: Spacing.xs },
+                ]}
+              >
+                {unlockedCount}
+              </Text>
+              <Text style={[Typography.labelSmall, { color: Colors.silverGrey, marginTop: 2 }]}>
+                Milestones
+              </Text>
             </View>
           </View>
         </GlassCard>
 
         {/* Financial Blueprint Card */}
-        <GlassCard style={styles.blueprintCard}>
+        <GlassCard animated delay={100} style={{ marginBottom: Spacing.lg }}>
           <View style={styles.blueprintHeader}>
             <View>
-              <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Financial Blueprint</Text>
-              <Text style={[styles.blueprintSubtitle, { color: Colors.secondaryText }]}>
+              <Text
+                style={[Typography.headlineSmall, { color: Colors.primaryText }]}
+              >
+                Financial Blueprint
+              </Text>
+              <Text
+                style={[
+                  Typography.bodySmall,
+                  { color: Colors.silverGrey, marginTop: Spacing.xs },
+                ]}
+              >
                 Your monthly plan
               </Text>
             </View>
-            <TouchableOpacity
-              style={[styles.editButton, { backgroundColor: Colors.electricTeal }]}
-              onPress={handleEditBlueprint}
-            >
-              <Ionicons name="create-outline" size={20} color={Colors.white} />
-            </TouchableOpacity>
+
+            {/* Edit Button with Gradient Ring */}
+            <PressableScale onPress={handleEditBlueprint} scaleValue={0.9}>
+              <LinearGradient
+                colors={[Colors.electricTeal, Colors.amethyst]}
+                style={styles.editButtonGradientRing}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <View
+                  style={[
+                    styles.editButtonInner,
+                    { backgroundColor: Colors.cardBackground },
+                  ]}
+                >
+                  <Ionicons name="create-outline" size={18} color={Colors.electricTeal} />
+                </View>
+              </LinearGradient>
+            </PressableScale>
           </View>
 
           {isRecalculating && (
-            <Animated.View style={[styles.recalculatingBanner, {
-              opacity: recalculateAnim,
-              transform: [{ scale: recalculateAnim }],
-            }]}>
+            <Animated.View
+              style={[
+                styles.recalculatingBanner,
+                {
+                  opacity: recalculateAnim,
+                  transform: [{ scale: recalculateAnim }],
+                },
+              ]}
+            >
               <LinearGradient
                 colors={[Colors.amethyst, Colors.electricTeal]}
                 style={styles.recalculatingGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Ionicons name="sync" size={16} color={Colors.white} />
-                <Text style={styles.recalculatingText}>Recalculating...</Text>
+                <Ionicons name="sync" size={14} color="#FFFFFF" />
+                <Text style={[Typography.labelMedium, { color: '#FFFFFF', marginLeft: Spacing.sm }]}>
+                  Recalculating...
+                </Text>
               </LinearGradient>
             </Animated.View>
           )}
 
           <View style={styles.blueprintDetails}>
-            <View style={[styles.blueprintRow, { borderBottomColor: Colors.glassBorder }]}>
-              <Text style={[styles.blueprintLabel, { color: Colors.secondaryText }]}>Monthly Earnings</Text>
-              <Text style={[styles.blueprintValue, { color: Colors.primaryText }]}>
-                {financialData?.currency || '£'}{financialData?.monthlyIncome?.toFixed(0) || '0'}
+            <View
+              style={[
+                styles.blueprintRow,
+                { borderBottomColor: Colors.glassBorder, borderBottomWidth: 1 },
+              ]}
+            >
+              <Text style={[Typography.bodyMedium, { color: Colors.silverGrey }]}>
+                Monthly Earnings
+              </Text>
+              <Text style={[Typography.titleMedium, { color: Colors.primaryText }]}>
+                {currency}{financialData?.monthlyIncome?.toFixed(0) || '0'}
               </Text>
             </View>
-            <View style={[styles.blueprintRow, { borderBottomColor: Colors.glassBorder }]}>
-              <Text style={[styles.blueprintLabel, { color: Colors.secondaryText }]}>Savings Goal</Text>
-              <Text style={[styles.blueprintValue, { color: Colors.primaryText }]}>
-                {financialData?.currency || '£'}{financialData?.savingsGoal?.toFixed(0) || '0'}
+
+            <View
+              style={[
+                styles.blueprintRow,
+                { borderBottomColor: Colors.glassBorder, borderBottomWidth: 1 },
+              ]}
+            >
+              <Text style={[Typography.bodyMedium, { color: Colors.silverGrey }]}>
+                Savings Goal
+              </Text>
+              <Text style={[Typography.titleMedium, { color: Colors.primaryText }]}>
+                {currency}{financialData?.savingsGoal?.toFixed(0) || '0'}
               </Text>
             </View>
+
             <View style={styles.blueprintRow}>
-              <Text style={[styles.blueprintLabelHighlight, { color: Colors.primaryText }]}>Daily Budget</Text>
-              <Text style={[styles.blueprintValueHighlight, { color: Colors.electricTeal }]}>
-                {financialData?.currency || '£'}{financialData?.dailyBudget?.toFixed(2) || '0.00'}
+              <Text style={[Typography.titleMedium, { color: Colors.primaryText }]}>
+                Daily Budget
+              </Text>
+              <Text
+                style={[
+                  Typography.headlineMedium,
+                  { color: Colors.electricTeal },
+                ]}
+              >
+                {currency}{financialData?.dailyBudget?.toFixed(2) || '0.00'}
               </Text>
             </View>
           </View>
         </GlassCard>
 
-        {/* Settings Options */}
-        <View style={styles.settingsSection}>
-          <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Settings</Text>
-          <GlassCard>
-            <TouchableOpacity style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <Ionicons name="person-outline" size={24} color={Colors.electricTeal} />
-                <Text style={[styles.settingText, { color: Colors.primaryText }]}>Edit Profile</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.mediumGray} />
-            </TouchableOpacity>
-
-            <View style={[styles.settingDivider, { backgroundColor: Colors.glassBorder }]} />
-
-            <TouchableOpacity style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <Ionicons name="notifications-outline" size={24} color={Colors.sunKissedAmber} />
-                <Text style={[styles.settingText, { color: Colors.primaryText }]}>Notifications</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.mediumGray} />
-            </TouchableOpacity>
-
-            <View style={[styles.settingDivider, { backgroundColor: Colors.glassBorder }]} />
-
-            <TouchableOpacity style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <Ionicons name="help-circle-outline" size={24} color={Colors.vibrantPurple} />
-                <Text style={[styles.settingText, { color: Colors.primaryText }]}>Help & Support</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.mediumGray} />
-            </TouchableOpacity>
-
-            <View style={[styles.settingDivider, { backgroundColor: Colors.glassBorder }]} />
-
-            <TouchableOpacity
-              style={styles.settingItem}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                signOut();
-              }}
+        {/* Milestones Section */}
+        <GlassCard animated delay={200} style={{ marginBottom: Spacing.lg }} noPadding>
+          <View style={{ paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, paddingBottom: Spacing.md }}>
+            <Text style={[Typography.headlineSmall, { color: Colors.primaryText }]}>
+              Milestones
+            </Text>
+            <Text
+              style={[
+                Typography.bodySmall,
+                { color: Colors.silverGrey, marginTop: Spacing.xs },
+              ]}
             >
-              <View style={styles.settingLeft}>
-                <Ionicons name="log-out-outline" size={24} color={Colors.radiantMagenta} />
-                <Text style={[styles.settingText, { color: Colors.radiantMagenta }]}>
-                  Sign Out
+              {unlockedCount} of {MILESTONES.length} unlocked
+            </Text>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.milestonesScroll}
+          >
+            {MILESTONES.map((milestone) => (
+              <View key={milestone.id} style={styles.milestoneItem}>
+                {milestone.unlocked ? (
+                  <LinearGradient
+                    colors={Gradients.hero}
+                    style={styles.milestoneIconContainer}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Text style={styles.milestoneEmoji}>{milestone.icon}</Text>
+                  </LinearGradient>
+                ) : (
+                  <View
+                    style={[
+                      styles.milestoneIconContainer,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(255,255,255,0.05)'
+                          : 'rgba(0,0,0,0.04)',
+                      },
+                    ]}
+                  >
+                    <View style={styles.milestoneLockOverlay}>
+                      <Ionicons
+                        name="lock-closed"
+                        size={20}
+                        color={isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)'}
+                      />
+                    </View>
+                  </View>
+                )}
+                <Text
+                  style={[
+                    Typography.labelSmall,
+                    {
+                      color: milestone.unlocked
+                        ? Colors.primaryText
+                        : Colors.silverGrey,
+                      marginTop: Spacing.sm,
+                      textAlign: 'center',
+                    },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {milestone.title}
                 </Text>
               </View>
-            </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </GlassCard>
+
+        {/* Settings Section */}
+        <View style={{ marginBottom: Spacing.lg }}>
+          <Text
+            style={[
+              Typography.headlineSmall,
+              { color: Colors.primaryText, marginBottom: Spacing.md },
+            ]}
+          >
+            Settings
+          </Text>
+
+          <GlassCard animated delay={300}>
+            {/* Edit Profile */}
+            <PressableScale onPress={() => {}} scaleValue={0.98}>
+              <View style={styles.settingItem}>
+                <View style={styles.settingLeft}>
+                  <View
+                    style={[
+                      styles.settingIconBg,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(45,212,191,0.12)'
+                          : 'rgba(20,184,166,0.08)',
+                      },
+                    ]}
+                  >
+                    <Ionicons name="person-outline" size={18} color={Colors.electricTeal} />
+                  </View>
+                  <Text style={[Typography.titleMedium, { color: Colors.primaryText }]}>
+                    Edit Profile
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={Colors.silverGrey} />
+              </View>
+            </PressableScale>
+
+            <View style={[styles.settingDivider, { backgroundColor: Colors.glassBorder }]} />
+
+            {/* Notifications */}
+            <PressableScale onPress={() => {}} scaleValue={0.98}>
+              <View style={styles.settingItem}>
+                <View style={styles.settingLeft}>
+                  <View
+                    style={[
+                      styles.settingIconBg,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(245,158,11,0.12)'
+                          : 'rgba(245,158,11,0.08)',
+                      },
+                    ]}
+                  >
+                    <Ionicons name="notifications-outline" size={18} color={Colors.sunKissedAmber} />
+                  </View>
+                  <Text style={[Typography.titleMedium, { color: Colors.primaryText }]}>
+                    Notifications
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={Colors.silverGrey} />
+              </View>
+            </PressableScale>
+
+            <View style={[styles.settingDivider, { backgroundColor: Colors.glassBorder }]} />
+
+            {/* Help & Support */}
+            <PressableScale onPress={() => {}} scaleValue={0.98}>
+              <View style={styles.settingItem}>
+                <View style={styles.settingLeft}>
+                  <View
+                    style={[
+                      styles.settingIconBg,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(168,85,247,0.12)'
+                          : 'rgba(168,85,247,0.08)',
+                      },
+                    ]}
+                  >
+                    <Ionicons name="help-circle-outline" size={18} color={Colors.vibrantPurple} />
+                  </View>
+                  <Text style={[Typography.titleMedium, { color: Colors.primaryText }]}>
+                    Help & Support
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={Colors.silverGrey} />
+              </View>
+            </PressableScale>
+
+            <View style={[styles.settingDivider, { backgroundColor: Colors.glassBorder }]} />
+
+            {/* Sign Out */}
+            <PressableScale onPress={handleSignOut} scaleValue={0.98}>
+              <View style={styles.settingItem}>
+                <View style={styles.settingLeft}>
+                  <View
+                    style={[
+                      styles.settingIconBg,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(225,29,72,0.12)'
+                          : 'rgba(225,29,72,0.08)',
+                      },
+                    ]}
+                  >
+                    <Ionicons name="log-out-outline" size={18} color={Colors.radiantMagenta} />
+                  </View>
+                  <Text
+                    style={[
+                      Typography.titleMedium,
+                      { color: Colors.radiantMagenta },
+                    ]}
+                  >
+                    Sign Out
+                  </Text>
+                </View>
+              </View>
+            </PressableScale>
           </GlassCard>
         </View>
       </ScrollView>
@@ -330,48 +697,135 @@ export default function ProfileScreen() {
         onRequestClose={() => setShowEditModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: Colors.white }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>Edit Blueprint</Text>
-              <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                <Ionicons name="close" size={28} color={Colors.primaryText} />
-              </TouchableOpacity>
+          <View
+            style={[
+              styles.modalContent,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(20, 10, 36, 0.95)'
+                  : Colors.white,
+                borderColor: isDark ? Colors.glassBorder : 'transparent',
+                borderWidth: isDark ? 1 : 0,
+                paddingBottom: Math.max(insets.bottom, Spacing.xxl),
+              },
+            ]}
+          >
+            {/* Handle Bar */}
+            <View style={styles.modalHandleContainer}>
+              <View
+                style={[
+                  styles.modalHandle,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255,255,255,0.2)'
+                      : 'rgba(0,0,0,0.12)',
+                  },
+                ]}
+              />
             </View>
 
-            <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Monthly Earnings</Text>
-            <View style={[styles.amountInput, { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder }]}>
-              <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>
-                {financialData?.currency || '£'}
+            <View style={styles.modalHeader}>
+              <Text style={[Typography.headlineMedium, { color: Colors.primaryText }]}>
+                Edit Blueprint
+              </Text>
+              <PressableScale onPress={() => setShowEditModal(false)} scaleValue={0.85}>
+                <View
+                  style={[
+                    styles.modalCloseButton,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.08)'
+                        : 'rgba(0,0,0,0.05)',
+                    },
+                  ]}
+                >
+                  <Ionicons name="close" size={20} color={Colors.primaryText} />
+                </View>
+              </PressableScale>
+            </View>
+
+            <Text
+              style={[
+                Typography.labelLarge,
+                { color: Colors.primaryText, marginTop: Spacing.lg },
+              ]}
+            >
+              Monthly Earnings
+            </Text>
+            <View
+              style={[
+                styles.amountInput,
+                {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : Colors.lightCream,
+                  borderColor: Colors.glassBorder,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  Typography.headlineMedium,
+                  { color: Colors.electricTeal, marginRight: Spacing.sm },
+                ]}
+              >
+                {currency}
               </Text>
               <TextInput
-                style={[styles.input, { color: Colors.primaryText }]}
+                style={[
+                  styles.input,
+                  Typography.headlineMedium,
+                  { color: Colors.primaryText },
+                ]}
                 placeholder="3000"
-                placeholderTextColor={Colors.mediumGray}
+                placeholderTextColor={Colors.silverGrey}
                 keyboardType="numeric"
                 value={editIncome}
                 onChangeText={setEditIncome}
               />
             </View>
 
-            <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Savings Goal</Text>
-            <View style={[styles.amountInput, { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder }]}>
-              <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>
-                {financialData?.currency || '£'}
+            <Text
+              style={[
+                Typography.labelLarge,
+                { color: Colors.primaryText, marginTop: Spacing.lg },
+              ]}
+            >
+              Savings Goal
+            </Text>
+            <View
+              style={[
+                styles.amountInput,
+                {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : Colors.lightCream,
+                  borderColor: Colors.glassBorder,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  Typography.headlineMedium,
+                  { color: Colors.electricTeal, marginRight: Spacing.sm },
+                ]}
+              >
+                {currency}
               </Text>
               <TextInput
-                style={[styles.input, { color: Colors.primaryText }]}
+                style={[
+                  styles.input,
+                  Typography.headlineMedium,
+                  { color: Colors.primaryText },
+                ]}
                 placeholder="500"
-                placeholderTextColor={Colors.mediumGray}
+                placeholderTextColor={Colors.silverGrey}
                 keyboardType="numeric"
                 value={editSavingsGoal}
                 onChangeText={setEditSavingsGoal}
               />
             </View>
 
-            <TouchableOpacity
-              style={styles.saveButton}
+            <PressableScale
               onPress={handleSaveBlueprint}
-              activeOpacity={0.8}
+              style={{ marginTop: Spacing.lg }}
+              disabled={isRecalculating}
             >
               <LinearGradient
                 colors={[Colors.electricTeal, Colors.glowingGreen]}
@@ -379,9 +833,11 @@ export default function ProfileScreen() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Text style={styles.saveButtonText}>Save Changes</Text>
+                <Text style={[Typography.titleLarge, { color: '#FFFFFF' }]}>
+                  {isRecalculating ? 'Saving...' : 'Save Changes'}
+                </Text>
               </LinearGradient>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         </View>
       </Modal>
@@ -394,256 +850,266 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingHorizontal: Spacing.lg,
   },
+
+  /* Header */
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: Spacing.lg,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+
+  /* Premium Pill Theme Toggle */
+  themeTogglePill: {
+    width: 52,
+    height: 28,
+    borderRadius: BorderRadius.round,
+    borderWidth: 1,
+    justifyContent: 'center',
   },
-  subtitle: {
-    fontSize: 14,
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  themeToggle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  themeToggleKnob: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+      },
+      android: { elevation: 3 },
+    }),
   },
-  profileCard: {
-    marginBottom: 20,
-  },
+
+  /* Profile Card */
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
-    gap: 16,
+    marginBottom: Spacing.lg,
+    gap: Spacing.md,
   },
-  avatarLarge: {
+  avatarRingOuter: {
+    width: 80,
+    height: 80,
+  },
+  avatarGradientRing: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    overflow: 'hidden',
-  },
-  avatarGradient: {
-    width: '100%',
-    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 3,
   },
-  avatarText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+  avatarInner: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emojiAvatarContainer: {
     width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 40,
+    borderRadius: 37,
   },
   emojiAvatar: {
-    fontSize: 48,
+    fontSize: 40,
+  },
+  avatarGradientFill: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitial: {
+    ...Typography.headlineLarge,
+    color: '#FFFFFF',
   },
   profileInfo: {
     flex: 1,
   },
-  userName: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  userEmail: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
+
+  /* Stats */
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingTop: 20,
+    alignItems: 'center',
+    paddingTop: Spacing.lg,
     borderTopWidth: 1,
   },
   stat: {
     alignItems: 'center',
+    flex: 1,
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '500',
+  statIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statDivider: {
     width: 1,
+    height: 48,
   },
-  blueprintCard: {
-    marginBottom: 20,
-  },
+
+  /* Blueprint */
   blueprintHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  blueprintSubtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  editButton: {
+  editButtonGradientRing: {
     width: 40,
     height: 40,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 2,
+  },
+  editButtonInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   recalculatingBanner: {
-    marginBottom: 16,
-    borderRadius: 12,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.md,
     overflow: 'hidden',
   },
   recalculatingGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    gap: 8,
-  },
-  recalculatingText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    paddingVertical: Spacing.sm,
   },
   blueprintDetails: {},
   blueprintRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingVertical: Spacing.md,
   },
-  blueprintLabel: {
-    fontSize: 16,
-    fontWeight: '500',
+
+  /* Milestones */
+  milestonesScroll: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
+    gap: Spacing.md,
   },
-  blueprintValue: {
-    fontSize: 16,
-    fontWeight: '600',
+  milestoneItem: {
+    alignItems: 'center',
+    width: 72,
   },
-  blueprintLabelHighlight: {
-    fontSize: 18,
-    fontWeight: '700',
+  milestoneIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
-  blueprintValueHighlight: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  milestoneEmoji: {
+    fontSize: 28,
   },
-  settingsSection: {
-    marginBottom: 20,
+  milestoneLockOverlay: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
+
+  /* Settings */
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: Spacing.md,
   },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: Spacing.md,
   },
-  settingText: {
-    fontSize: 16,
-    fontWeight: '500',
+  settingIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   settingDivider: {
     height: 1,
+    marginLeft: 52,
   },
+
+  /* Modal */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
-    paddingBottom: 40,
+    borderTopLeftRadius: BorderRadius.xxl,
+    borderTopRightRadius: BorderRadius.xxl,
+    paddingHorizontal: Spacing.lg,
+  },
+  modalHandleContainer: {
+    alignItems: 'center',
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginTop: Spacing.sm,
   },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-    marginTop: 16,
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   amountInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    paddingHorizontal: 20,
-  },
-  currencySymbol: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginRight: 8,
+    paddingHorizontal: Spacing.lg,
+    marginTop: Spacing.sm,
   },
   input: {
     flex: 1,
-    fontSize: 28,
-    fontWeight: 'bold',
-    paddingVertical: 16,
-  },
-  saveButton: {
-    marginTop: 24,
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#14B8A6',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 6,
+    paddingVertical: Spacing.md,
   },
   saveButtonGradient: {
-    paddingVertical: 18,
+    paddingVertical: Spacing.md,
     alignItems: 'center',
-  },
-  saveButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+    borderRadius: BorderRadius.xxl,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#14B8A6',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+      },
+      android: { elevation: 6 },
+    }),
   },
 });

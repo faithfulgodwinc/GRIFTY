@@ -4,16 +4,18 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Dimensions,
-  ActivityIndicator,
   Modal,
   TextInput,
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getThemeColors, getGradients } from '@/constants/Colors';
+import { Typography, Spacing, BorderRadius } from '@/constants/Theme';
 import { GlassCard } from '@/components/GlassCard';
+import { PressableScale } from '@/components/PressableScale';
+import { EmptyState } from '@/components/EmptyState';
+import { DashboardSkeleton } from '@/components/SkeletonLoader';
 import { BudgetCategoryRing } from '@/components/BudgetCategoryRing';
 import { storage } from '@/utils/storage';
 import { BudgetCategory, FinancialData, DailyRolloverState } from '@/types';
@@ -21,10 +23,10 @@ import { initializeDailyRollover, updateDailySpending } from '@/utils/dailyRollo
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
+import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
 
-// Available icons for budget categories
 const AVAILABLE_ICONS = [
   { icon: 'home', label: 'Home' },
   { icon: 'cart', label: 'Shopping' },
@@ -44,6 +46,10 @@ const AVAILABLE_COLORS = [
   '#E11D48', '#EC4899', '#F59E0B', '#14B8A6',
   '#10B981', '#6366F1', '#8B5CF6', '#EF4444',
 ];
+
+const formatCurrency = (currency: string, value: number): string => {
+  return `${currency}${value.toFixed(2)}`;
+};
 
 export default function HomeScreen() {
   const [financialData, setFinancialData] = useState<FinancialData | null>(null);
@@ -85,14 +91,12 @@ export default function HomeScreen() {
       setFinancialData(financial);
       setUserData(user);
 
-      // Load budget categories (user must create manually)
       if (financial.budgetCategories && financial.budgetCategories.length > 0) {
         setBudgetCategories(financial.budgetCategories);
       } else {
         setBudgetCategories([]);
       }
 
-      // Initialize the daily rollover engine
       const rollover = await initializeDailyRollover(financial);
       setRolloverState(rollover);
     } catch (loadError) {
@@ -113,7 +117,6 @@ export default function HomeScreen() {
 
     const utilizationRate = (totalSpent / totalAllocated) * 100;
 
-    // Score: 100 for perfect budget adherence, decreasing as overspending occurs
     if (utilizationRate <= 80) return 100;
     if (utilizationRate <= 90) return 90;
     if (utilizationRate <= 100) return 80;
@@ -201,7 +204,6 @@ export default function HomeScreen() {
 
       const newTotalSpent = rolloverState.todayEntry.totalSpent + amount;
 
-      // Update financial data
       const updatedFinancialData: FinancialData = {
         ...financialData,
         dailySpending: newTotalSpent,
@@ -209,11 +211,9 @@ export default function HomeScreen() {
       await storage.setFinancialData(updatedFinancialData);
       setFinancialData(updatedFinancialData);
 
-      // Update rollover state
       const updatedRollover = await updateDailySpending(newTotalSpent, updatedFinancialData);
       setRolloverState(updatedRollover);
 
-      // Update streak in financial data
       const finalData: FinancialData = {
         ...updatedFinancialData,
         streakDays: updatedRollover.momentumStreak,
@@ -230,35 +230,41 @@ export default function HomeScreen() {
     }
   };
 
+  // --- Loading State ---
   if (isLoading) {
     return (
       <LinearGradient colors={Gradients.background} style={styles.container}>
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={Colors.electricTeal} />
-          <Text style={[styles.loadingText, { color: Colors.secondaryText }]}>Loading your dashboard...</Text>
-        </View>
+        <DashboardSkeleton />
       </LinearGradient>
     );
   }
 
+  // --- Error State ---
   if (error || !financialData) {
     return (
       <LinearGradient colors={Gradients.background} style={styles.container}>
         <View style={styles.centerContainer}>
-          <Ionicons name="alert-circle-outline" size={64} color={Colors.radiantMagenta} />
-          <Text style={[styles.errorText, { color: Colors.primaryText }]}>{error || 'Unable to load data'}</Text>
-          <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: Colors.electricTeal }]}
+          <View style={[styles.errorIconWrap, { backgroundColor: isDark ? 'rgba(225, 29, 72, 0.12)' : 'rgba(225, 29, 72, 0.08)' }]}>
+            <Ionicons name="alert-circle-outline" size={56} color={Colors.radiantMagenta} />
+          </View>
+          <Text style={[styles.errorText, { color: Colors.primaryText }]}>
+            {error || 'Unable to load data'}
+          </Text>
+          <Text style={[styles.errorSubtext, { color: Colors.tertiaryText }]}>
+            Check your connection and try again
+          </Text>
+          <PressableScale
             onPress={loadData}
+            style={[styles.retryButton, { backgroundColor: Colors.electricTeal }]}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </LinearGradient>
     );
   }
 
-  const currency = financialData?.currency || '£';
+  const currency = financialData?.currency || '\u00A3';
 
   // Rollover-powered values
   const todayEffectiveLimit = rolloverState?.todayEntry.effectiveLimit ?? financialData.dailyBudget;
@@ -278,7 +284,6 @@ export default function HomeScreen() {
     return 'Good Evening';
   };
 
-  // Get streak label text
   const getStreakLabel = () => {
     if (momentumStreak === 0) return 'Start your streak!';
     if (momentumStreak === 1) return 'Day';
@@ -288,15 +293,19 @@ export default function HomeScreen() {
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+
+        {/* ============ HEADER ============ */}
         <View style={styles.header}>
           <View>
-            <Text style={[styles.greeting, { color: Colors.primaryText }]}>{getGreeting()}! 👋</Text>
+            <Text style={[styles.greeting, { color: Colors.primaryText }]}>
+              {getGreeting()}!
+            </Text>
             <Text style={[styles.subtitle, { color: Colors.electricTeal }]}>
               {userData?.name || 'Mom Boss'}
             </Text>
           </View>
-          <TouchableOpacity
+          <PressableScale
+            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
             style={[
               styles.notificationButton,
               {
@@ -304,35 +313,43 @@ export default function HomeScreen() {
                 borderColor: isDark ? 'rgba(45, 212, 191, 0.3)' : Colors.glassBorder,
               },
             ]}
-            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
           >
             <Ionicons
               name="notifications-outline"
-              size={24}
+              size={22}
               color={isDark ? Colors.electricTeal : Colors.primaryText}
             />
             <View style={[
               styles.notificationBadge,
               { backgroundColor: isDark ? Colors.amethyst : Colors.radiantMagenta },
             ]} />
-          </TouchableOpacity>
+          </PressableScale>
         </View>
 
-        {/* Daily Spending Dashboard */}
-        <GlassCard style={styles.dailySpendingCard}>
+        {/* ============ DAILY SPENDING DASHBOARD ============ */}
+        <GlassCard animated delay={0} style={styles.dailySpendingCard}>
           <View style={styles.dailySpendingHeader}>
             <View>
-              <Text style={[styles.dailySpendingLabel, { color: Colors.secondaryText }]}>Today&apos;s Limit</Text>
+              <Text style={[styles.dailySpendingLabel, { color: Colors.tertiaryText }]}>
+                Today&apos;s Limit
+              </Text>
               <Text style={[styles.dailySpendingDate, { color: Colors.tertiaryText }]}>
                 {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
               </Text>
             </View>
             <View style={styles.dailySpendingAmounts}>
               <Text style={[styles.dailySpendingValue, { color: Colors.primaryText }]}>
-                {currency}{todayEffectiveLimit.toFixed(2)}
+                {formatCurrency(currency, todayEffectiveLimit)}
               </Text>
               {rolloverState && rolloverState.todayEntry.rolloverFromPrevious !== 0 && (
-                <View style={styles.rolloverBadge}>
+                <View style={[
+                  styles.rolloverBadge,
+                  {
+                    backgroundColor: rolloverState.todayEntry.rolloverFromPrevious > 0
+                      ? (isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.08)')
+                      : (isDark ? 'rgba(225, 29, 72, 0.12)' : 'rgba(225, 29, 72, 0.08)'),
+                  },
+                ]}>
                   <Ionicons
                     name={rolloverState.todayEntry.rolloverFromPrevious > 0 ? 'arrow-up-circle' : 'arrow-down-circle'}
                     size={14}
@@ -343,30 +360,36 @@ export default function HomeScreen() {
                     { color: rolloverState.todayEntry.rolloverFromPrevious > 0 ? Colors.glowingGreen : Colors.radiantMagenta },
                   ]}>
                     {rolloverState.todayEntry.rolloverFromPrevious > 0 ? '+' : ''}
-                    {currency}{rolloverState.todayEntry.rolloverFromPrevious.toFixed(2)} rollover
+                    {formatCurrency(currency, rolloverState.todayEntry.rolloverFromPrevious)} rollover
                   </Text>
                 </View>
               )}
             </View>
           </View>
 
-          {/* Progress Bar */}
-          <View style={[styles.progressBarContainer, { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream }]}>
-            <LinearGradient
-              colors={
-                !isUnderBudget
-                  ? [Colors.radiantMagenta, Colors.sunKissedAmber]
-                  : [Colors.electricTeal, Colors.glowingGreen]
-              }
-              style={[
-                styles.progressBarFill,
-                {
-                  width: `${spendingPercentage}%`,
-                },
-              ]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            />
+          {/* Neon Glow Progress Bar */}
+          <View style={[
+            styles.progressBarContainer,
+            { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream },
+          ]}>
+            <View style={[
+              styles.progressBarGlow,
+              {
+                width: `${spendingPercentage}%` as any,
+                shadowColor: isUnderBudget ? Colors.electricTeal : Colors.radiantMagenta,
+              },
+            ]}>
+              <LinearGradient
+                colors={
+                  !isUnderBudget
+                    ? [Colors.radiantMagenta, Colors.sunKissedAmber]
+                    : Gradients.neonBar
+                }
+                style={styles.progressBarFill}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              />
+            </View>
           </View>
 
           {/* Status Message */}
@@ -375,53 +398,51 @@ export default function HomeScreen() {
               <View style={styles.dailyStatusRow}>
                 <Ionicons name="checkmark-circle" size={16} color={Colors.glowingGreen} />
                 <Text style={[styles.dailyStatusText, { color: Colors.glowingGreen }]}>
-                  {currency}{todayRemaining.toFixed(2)} remaining today
+                  {formatCurrency(currency, todayRemaining)} remaining today
                 </Text>
               </View>
             ) : (
               <View style={styles.dailyStatusRow}>
                 <Ionicons name="alert-circle" size={16} color={Colors.radiantMagenta} />
                 <Text style={[styles.dailyStatusText, { color: Colors.radiantMagenta }]}>
-                  {currency}{Math.abs(todayRemaining).toFixed(2)} over budget
+                  {formatCurrency(currency, Math.abs(todayRemaining))} over budget
                 </Text>
               </View>
             )}
           </View>
         </GlassCard>
 
-        {/* Dashboard Metrics Row */}
+        {/* ============ METRICS ROW ============ */}
         <View style={styles.metricsRow}>
-          {/* Total Spent Today */}
-          <GlassCard style={styles.metricCard}>
+          <GlassCard animated delay={100} style={styles.metricCard}>
             <View style={[styles.metricIconBg, { backgroundColor: isDark ? 'rgba(225, 29, 72, 0.15)' : '#E11D4815' }]}>
               <Ionicons name="receipt-outline" size={20} color={Colors.radiantMagenta} />
             </View>
             <Text style={[styles.metricValue, { color: Colors.primaryText }]}>
-              {currency}{todayTotalSpent.toFixed(2)}
+              {formatCurrency(currency, todayTotalSpent)}
             </Text>
             <Text style={[styles.metricLabel, { color: Colors.tertiaryText }]}>Spent Today</Text>
           </GlassCard>
 
-          {/* Tomorrow's Forecast */}
-          <GlassCard style={styles.metricCard}>
+          <GlassCard animated delay={200} style={styles.metricCard}>
             <View style={[styles.metricIconBg, { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.15)' : '#A855F715' }]}>
               <Ionicons name="telescope-outline" size={20} color={Colors.amethyst} />
             </View>
             <Text style={[styles.metricValue, { color: Colors.primaryText }]}>
-              {currency}{tomorrowForecast.toFixed(2)}
+              {formatCurrency(currency, tomorrowForecast)}
             </Text>
             <Text style={[styles.metricLabel, { color: Colors.tertiaryText }]}>Tomorrow</Text>
           </GlassCard>
         </View>
 
-        {/* Log Spending Button */}
-        <TouchableOpacity
-          style={styles.logSpendingButton}
+        {/* ============ LOG SPENDING BUTTON ============ */}
+        <PressableScale
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             setShowLogSpendingModal(true);
           }}
-          activeOpacity={0.8}
+          style={styles.logSpendingButton}
+          scaleValue={0.96}
         >
           <LinearGradient
             colors={isDark ? [Colors.electricTeal, Colors.amethyst] : [Colors.electricTeal, Colors.glowingGreen]}
@@ -432,54 +453,48 @@ export default function HomeScreen() {
             <Ionicons name="add-circle-outline" size={24} color="#FFFFFF" />
             <Text style={styles.logSpendingText}>Log Today&apos;s Spending</Text>
           </LinearGradient>
-        </TouchableOpacity>
+        </PressableScale>
 
-        {/* Monthly Budget Categories */}
+        {/* ============ MONTHLY BUDGET CATEGORIES ============ */}
         <View style={styles.budgetSection}>
           <View style={styles.budgetSectionHeader}>
             <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Monthly Budget</Text>
             <View style={styles.budgetHeaderActions}>
-              <TouchableOpacity
+              <PressableScale
                 onPress={() => setShowAddItemModal(true)}
                 style={[styles.addButton, { backgroundColor: Colors.electricTeal }]}
               >
                 <Ionicons name="add" size={20} color={Colors.white} />
-              </TouchableOpacity>
+              </PressableScale>
               {budgetCategories.length > 0 && (
-                <TouchableOpacity onPress={handleOpenBudgetSetup}>
+                <PressableScale onPress={handleOpenBudgetSetup}>
                   <Ionicons name="settings-outline" size={20} color={Colors.electricTeal} />
-                </TouchableOpacity>
+                </PressableScale>
               )}
             </View>
           </View>
 
           {budgetCategories.length === 0 ? (
-            <GlassCard style={styles.emptyStateCard}>
-              <Text style={styles.emptyStateEmoji}>💰</Text>
-              <Text style={[styles.emptyStateTitle, { color: Colors.primaryText }]}>
-                Create Your Budget
-              </Text>
-              <Text style={[styles.emptyStateText, { color: Colors.secondaryText }]}>
-                Start by adding custom budget items that match your spending needs.
-              </Text>
-              <TouchableOpacity
-                style={styles.createFirstItemButton}
-                onPress={() => setShowAddItemModal(true)}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={[Colors.electricTeal, Colors.glowingGreen]}
-                  style={styles.createFirstItemGradient}
-                >
-                  <Ionicons name="add-circle-outline" size={24} color={Colors.white} />
-                  <Text style={styles.createFirstItemText}>Create First Budget Item</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+            <GlassCard animated delay={300}>
+              <EmptyState
+                icon="wallet-outline"
+                iconColor={Colors.electricTeal}
+                title="Create Your Budget"
+                description="Start by adding custom budget items that match your spending needs."
+                actionLabel="Create First Budget Item"
+                onAction={() => setShowAddItemModal(true)}
+                gradientColors={[Colors.electricTeal, Colors.glowingGreen]}
+              />
             </GlassCard>
           ) : (
             <View style={styles.budgetGrid}>
-              {budgetCategories.map((category) => (
-                <View key={category.id} style={styles.budgetCategoryCard}>
+              {budgetCategories.map((category, index) => (
+                <GlassCard
+                  key={category.id}
+                  animated
+                  delay={300 + index * 80}
+                  style={styles.budgetCategoryCard}
+                >
                   <BudgetCategoryRing
                     label={category.name}
                     allocated={category.allocated}
@@ -489,46 +504,56 @@ export default function HomeScreen() {
                     tealColor={Colors.electricTeal}
                     amberColor={Colors.sunKissedAmber}
                   />
-                </View>
+                </GlassCard>
               ))}
             </View>
           )}
         </View>
 
-        {/* Quick-Log */}
+        {/* ============ QUICK-LOG ============ */}
         {budgetCategories.length > 0 && (
-          <>
+          <View style={styles.quickLogSection}>
             <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Quick-Log</Text>
             <View style={styles.quickActions}>
-              {budgetCategories.slice(0, 4).map((cat) => (
-                <TouchableOpacity
+              {budgetCategories.slice(0, 4).map((cat, index) => (
+                <PressableScale
                   key={cat.id}
-                  style={styles.quickAction}
                   onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
+                  style={styles.quickAction}
+                  scaleValue={0.93}
                 >
                   <LinearGradient
                     colors={[cat.color, cat.color + 'DD']}
                     style={styles.quickActionGradient}
                   >
                     <Ionicons name={cat.icon as any} size={28} color={Colors.white} />
-                    <Text style={styles.quickActionText}>{cat.name}</Text>
+                    <Text style={styles.quickActionText} numberOfLines={1}>{cat.name}</Text>
                   </LinearGradient>
-                </TouchableOpacity>
+                </PressableScale>
               ))}
             </View>
-          </>
+          </View>
         )}
 
-        {/* Momentum Streak */}
-        <GlassCard style={styles.momentumStreakCard}>
+        {/* ============ MOMENTUM STREAK ============ */}
+        <GlassCard animated delay={500} style={styles.momentumStreakCard}>
           <View style={styles.momentumStreakContent}>
             <View style={styles.momentumStreakLeft}>
-              <LinearGradient
-                colors={isDark ? ['#F59E0B', '#E11D48'] : ['#F59E0B', '#EF4444']}
-                style={styles.streakIconLarge}
-              >
-                <Text style={styles.streakEmojiLarge}>🔥</Text>
-              </LinearGradient>
+              <View style={styles.streakFireWrap}>
+                <Svg width={52} height={52} viewBox="0 0 52 52">
+                  <Defs>
+                    <SvgGradient id="fireGrad" x1="0" y1="0" x2="0" y2="1">
+                      <Stop offset="0" stopColor="#F59E0B" stopOpacity="0.9" />
+                      <Stop offset="0.5" stopColor="#EF4444" stopOpacity="0.7" />
+                      <Stop offset="1" stopColor="#E11D48" stopOpacity="0.4" />
+                    </SvgGradient>
+                  </Defs>
+                  <Rect x="0" y="0" width="52" height="52" rx="16" fill="url(#fireGrad)" />
+                </Svg>
+                <View style={styles.streakEmojiOverlay}>
+                  <Text style={styles.streakEmojiLarge}>{'\uD83D\uDD25'}</Text>
+                </View>
+              </View>
               <View style={styles.momentumStreakInfo}>
                 <Text style={[styles.momentumStreakTitle, { color: Colors.primaryText }]}>
                   Momentum Streak
@@ -557,7 +582,7 @@ export default function HomeScreen() {
 
           {/* Streak Progress Dots */}
           {momentumStreak > 0 && (
-            <View style={styles.streakDotsContainer}>
+            <View style={[styles.streakDotsContainer, { borderTopColor: Colors.glassBorder }]}>
               {Array.from({ length: Math.min(momentumStreak, 7) }).map((_, i) => (
                 <LinearGradient
                   key={`dot-${i}`}
@@ -573,9 +598,10 @@ export default function HomeScreen() {
             </View>
           )}
         </GlassCard>
+
       </ScrollView>
 
-      {/* Log Spending Modal */}
+      {/* ============ LOG SPENDING MODAL ============ */}
       <Modal
         visible={showLogSpendingModal}
         animationType="slide"
@@ -583,26 +609,31 @@ export default function HomeScreen() {
         onRequestClose={() => setShowLogSpendingModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkPurple : Colors.white }]}>
+          <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkPurple : Colors.white, borderColor: Colors.glassBorder }]}>
+            <View style={[styles.modalHandle, { backgroundColor: Colors.tertiaryText }]} />
+
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>Log Spending</Text>
-              <TouchableOpacity onPress={() => setShowLogSpendingModal(false)}>
-                <Ionicons name="close" size={28} color={Colors.primaryText} />
-              </TouchableOpacity>
+              <PressableScale onPress={() => setShowLogSpendingModal(false)}>
+                <Ionicons name="close-circle" size={28} color={Colors.tertiaryText} />
+              </PressableScale>
             </View>
 
             {/* Current Status */}
-            <View style={[styles.logStatusCard, { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream }]}>
+            <View style={[styles.logStatusCard, {
+              backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
+              borderColor: Colors.glassBorder,
+            }]}>
               <View style={styles.logStatusRow}>
-                <Text style={[styles.logStatusLabel, { color: Colors.secondaryText }]}>Today&apos;s Limit</Text>
+                <Text style={[styles.logStatusLabel, { color: Colors.tertiaryText }]}>Today&apos;s Limit</Text>
                 <Text style={[styles.logStatusValue, { color: Colors.electricTeal }]}>
-                  {currency}{todayEffectiveLimit.toFixed(2)}
+                  {formatCurrency(currency, todayEffectiveLimit)}
                 </Text>
               </View>
               <View style={styles.logStatusRow}>
-                <Text style={[styles.logStatusLabel, { color: Colors.secondaryText }]}>Already Spent</Text>
+                <Text style={[styles.logStatusLabel, { color: Colors.tertiaryText }]}>Already Spent</Text>
                 <Text style={[styles.logStatusValue, { color: Colors.primaryText }]}>
-                  {currency}{todayTotalSpent.toFixed(2)}
+                  {formatCurrency(currency, todayTotalSpent)}
                 </Text>
               </View>
               <View style={[styles.logStatusDivider, { backgroundColor: Colors.glassBorder }]} />
@@ -611,13 +642,16 @@ export default function HomeScreen() {
                 <Text style={[styles.logStatusValueBold, {
                   color: isUnderBudget ? Colors.glowingGreen : Colors.radiantMagenta,
                 }]}>
-                  {currency}{todayRemaining.toFixed(2)}
+                  {formatCurrency(currency, todayRemaining)}
                 </Text>
               </View>
             </View>
 
             <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Amount Spent</Text>
-            <View style={[styles.budgetInputField, { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream, borderColor: Colors.glassBorder }]}>
+            <View style={[styles.budgetInputField, {
+              backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
+              borderColor: Colors.glassBorder,
+            }]}>
               <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
               <TextInput
                 style={[styles.budgetInput, { color: Colors.primaryText }]}
@@ -631,7 +665,10 @@ export default function HomeScreen() {
             </View>
 
             {spendingAmount && parseFloat(spendingAmount) > 0 && (
-              <View style={[styles.spendingPreview, { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.4)' : Colors.lightCream + '80' }]}>
+              <View style={[styles.spendingPreview, {
+                backgroundColor: isDark ? 'rgba(45, 27, 61, 0.4)' : Colors.lightCream + '80',
+                borderColor: Colors.glassBorder,
+              }]}>
                 <Ionicons
                   name={parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? 'checkmark-circle' : 'warning'}
                   size={18}
@@ -641,17 +678,17 @@ export default function HomeScreen() {
                   color: parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? Colors.glowingGreen : Colors.sunKissedAmber,
                 }]}>
                   {parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit
-                    ? `Still under budget — ${currency}${(todayRemaining - parseFloat(spendingAmount)).toFixed(2)} left`
-                    : `Over budget by ${currency}${(parseFloat(spendingAmount) + todayTotalSpent - todayEffectiveLimit).toFixed(2)}`
+                    ? `Still under budget \u2014 ${formatCurrency(currency, todayRemaining - parseFloat(spendingAmount))} left`
+                    : `Over budget by ${formatCurrency(currency, parseFloat(spendingAmount) + todayTotalSpent - todayEffectiveLimit)}`
                   }
                 </Text>
               </View>
             )}
 
-            <TouchableOpacity
-              style={styles.saveButton}
+            <PressableScale
               onPress={handleLogSpending}
-              activeOpacity={0.8}
+              style={styles.saveButton}
+              scaleValue={0.97}
             >
               <LinearGradient
                 colors={[Colors.electricTeal, Colors.glowingGreen]}
@@ -661,12 +698,12 @@ export default function HomeScreen() {
               >
                 <Text style={styles.saveButtonText}>Log Spending</Text>
               </LinearGradient>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         </View>
       </Modal>
 
-      {/* Budget Allocation Modal */}
+      {/* ============ BUDGET ALLOCATION MODAL ============ */}
       <Modal
         visible={showBudgetModal}
         animationType="slide"
@@ -674,32 +711,39 @@ export default function HomeScreen() {
         onRequestClose={() => setShowBudgetModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkPurple : Colors.white }]}>
+          <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkPurple : Colors.white, borderColor: Colors.glassBorder }]}>
+            <View style={[styles.modalHandle, { backgroundColor: Colors.tertiaryText }]} />
+
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>Set Budget</Text>
-              <TouchableOpacity onPress={() => setShowBudgetModal(false)}>
-                <Ionicons name="close" size={28} color={Colors.primaryText} />
-              </TouchableOpacity>
+              <PressableScale onPress={() => setShowBudgetModal(false)}>
+                <Ionicons name="close-circle" size={28} color={Colors.tertiaryText} />
+              </PressableScale>
             </View>
 
-            <ScrollView>
+            <ScrollView showsVerticalScrollIndicator={false}>
               {budgetCategories.map((category, index) => (
                 <View key={category.id} style={styles.budgetInputRow}>
                   <View style={styles.budgetInputHeader}>
                     <View style={styles.budgetInputLabelRow}>
-                      <Ionicons name={category.icon as any} size={20} color={category.color} />
+                      <View style={[styles.budgetItemIconWrap, { backgroundColor: category.color + '20' }]}>
+                        <Ionicons name={category.icon as any} size={18} color={category.color} />
+                      </View>
                       <Text style={[styles.budgetInputName, { color: Colors.primaryText }]}>
                         {category.name}
                       </Text>
                     </View>
-                    <TouchableOpacity
+                    <PressableScale
                       onPress={() => handleDeleteBudgetItem(category.id)}
                       style={styles.deleteItemButton}
                     >
                       <Ionicons name="trash-outline" size={18} color={Colors.error} />
-                    </TouchableOpacity>
+                    </PressableScale>
                   </View>
-                  <View style={[styles.budgetInputField, { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream, borderColor: Colors.glassBorder }]}>
+                  <View style={[styles.budgetInputField, {
+                    backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
+                    borderColor: Colors.glassBorder,
+                  }]}>
                     <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
                     <TextInput
                       style={[styles.budgetInput, { color: Colors.primaryText }]}
@@ -718,10 +762,10 @@ export default function HomeScreen() {
               ))}
             </ScrollView>
 
-            <TouchableOpacity
-              style={styles.saveButton}
+            <PressableScale
               onPress={handleSaveBudgetAllocations}
-              activeOpacity={0.8}
+              style={styles.saveButton}
+              scaleValue={0.97}
             >
               <LinearGradient
                 colors={[Colors.electricTeal, Colors.glowingGreen]}
@@ -731,12 +775,12 @@ export default function HomeScreen() {
               >
                 <Text style={styles.saveButtonText}>Save Budget</Text>
               </LinearGradient>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         </View>
       </Modal>
 
-      {/* Add Budget Item Modal */}
+      {/* ============ ADD BUDGET ITEM MODAL ============ */}
       <Modal
         visible={showAddItemModal}
         animationType="slide"
@@ -744,12 +788,14 @@ export default function HomeScreen() {
         onRequestClose={() => setShowAddItemModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkPurple : Colors.white }]}>
+          <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkPurple : Colors.white, borderColor: Colors.glassBorder }]}>
+            <View style={[styles.modalHandle, { backgroundColor: Colors.tertiaryText }]} />
+
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>New Budget Item</Text>
-              <TouchableOpacity onPress={() => setShowAddItemModal(false)}>
-                <Ionicons name="close" size={28} color={Colors.primaryText} />
-              </TouchableOpacity>
+              <PressableScale onPress={() => setShowAddItemModal(false)}>
+                <Ionicons name="close-circle" size={28} color={Colors.tertiaryText} />
+              </PressableScale>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -757,7 +803,11 @@ export default function HomeScreen() {
               <View style={styles.inputSection}>
                 <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Item Name</Text>
                 <TextInput
-                  style={[styles.textInput, { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream, borderColor: Colors.glassBorder, color: Colors.primaryText }]}
+                  style={[styles.textInput, {
+                    backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
+                    borderColor: Colors.glassBorder,
+                    color: Colors.primaryText,
+                  }]}
                   placeholder="e.g., Groceries, Rent, Transportation"
                   placeholderTextColor={Colors.mediumGray}
                   value={newItemName}
@@ -771,28 +821,32 @@ export default function HomeScreen() {
                 <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Choose Icon</Text>
                 <View style={styles.iconGrid}>
                   {AVAILABLE_ICONS.map((item) => (
-                    <TouchableOpacity
+                    <PressableScale
                       key={item.icon}
+                      onPress={() => {
+                        setNewItemIcon(item.icon);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
                       style={[
                         styles.iconOption,
-                        { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream, borderColor: Colors.glassBorder },
+                        {
+                          backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
+                          borderColor: Colors.glassBorder,
+                        },
                         newItemIcon === item.icon && {
                           borderColor: Colors.electricTeal,
                           borderWidth: 2,
                           backgroundColor: Colors.electricTeal + '15',
                         },
                       ]}
-                      onPress={() => {
-                        setNewItemIcon(item.icon);
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }}
+                      scaleValue={0.9}
                     >
                       <Ionicons
                         name={item.icon as any}
                         size={24}
-                        color={newItemIcon === item.icon ? Colors.electricTeal : Colors.secondaryText}
+                        color={newItemIcon === item.icon ? Colors.electricTeal : Colors.tertiaryText}
                       />
-                    </TouchableOpacity>
+                    </PressableScale>
                   ))}
                 </View>
               </View>
@@ -802,22 +856,23 @@ export default function HomeScreen() {
                 <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Choose Color</Text>
                 <View style={styles.colorGrid}>
                   {AVAILABLE_COLORS.map((color) => (
-                    <TouchableOpacity
+                    <PressableScale
                       key={color}
+                      onPress={() => {
+                        setNewItemColor(color);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
                       style={[
                         styles.colorOption,
                         { backgroundColor: color },
                         newItemColor === color && styles.colorOptionSelected,
                       ]}
-                      onPress={() => {
-                        setNewItemColor(color);
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }}
+                      scaleValue={0.88}
                     >
                       {newItemColor === color && (
                         <Ionicons name="checkmark" size={20} color={Colors.white} />
                       )}
-                    </TouchableOpacity>
+                    </PressableScale>
                   ))}
                 </View>
               </View>
@@ -825,7 +880,10 @@ export default function HomeScreen() {
               {/* Allocation Amount */}
               <View style={styles.inputSection}>
                 <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Allocate Money (Optional)</Text>
-                <View style={[styles.budgetInputField, { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream, borderColor: Colors.glassBorder }]}>
+                <View style={[styles.budgetInputField, {
+                  backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
+                  borderColor: Colors.glassBorder,
+                }]}>
                   <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
                   <TextInput
                     style={[styles.budgetInput, { color: Colors.primaryText }]}
@@ -841,7 +899,10 @@ export default function HomeScreen() {
               {/* Preview */}
               <View style={styles.previewSection}>
                 <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Preview</Text>
-                <View style={[styles.previewCard, { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream }]}>
+                <View style={[styles.previewCard, {
+                  backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
+                  borderColor: Colors.glassBorder,
+                }]}>
                   <View style={[styles.previewIcon, { backgroundColor: newItemColor + '20' }]}>
                     <Ionicons name={newItemIcon as any} size={32} color={newItemColor} />
                   </View>
@@ -850,17 +911,17 @@ export default function HomeScreen() {
                   </Text>
                   {newItemAllocation && parseFloat(newItemAllocation) > 0 && (
                     <Text style={[styles.previewAllocation, { color: Colors.electricTeal }]}>
-                      {currency}{parseFloat(newItemAllocation).toFixed(2)} allocated
+                      {formatCurrency(currency, parseFloat(newItemAllocation))} allocated
                     </Text>
                   )}
                 </View>
               </View>
             </ScrollView>
 
-            <TouchableOpacity
-              style={styles.saveButton}
+            <PressableScale
               onPress={handleAddBudgetItem}
-              activeOpacity={0.8}
+              style={styles.saveButton}
+              scaleValue={0.97}
             >
               <LinearGradient
                 colors={[Colors.electricTeal, Colors.glowingGreen]}
@@ -870,7 +931,7 @@ export default function HomeScreen() {
               >
                 <Text style={styles.saveButtonText}>Create Budget Item</Text>
               </LinearGradient>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         </View>
       </Modal>
@@ -884,52 +945,57 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 60,
-    paddingHorizontal: 20,
+    paddingHorizontal: Spacing.lg,
     paddingBottom: 120,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    gap: 16,
+    paddingHorizontal: Spacing.xxl,
+    gap: Spacing.md,
   },
-  loadingText: {
-    fontSize: 16,
-    textAlign: 'center',
-    fontWeight: '500',
+  errorIconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
   },
   errorText: {
-    fontSize: 16,
+    ...Typography.titleLarge,
     textAlign: 'center',
-    marginTop: 16,
-    fontWeight: '500',
+    marginTop: Spacing.sm,
+  },
+  errorSubtext: {
+    ...Typography.bodyMedium,
+    textAlign: 'center',
   },
   retryButton: {
-    marginTop: 16,
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 12,
+    marginTop: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
   },
   retryButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    ...Typography.titleSmall,
   },
+
+  // Header
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: Spacing.lg,
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    ...Typography.headlineLarge,
   },
   subtitle: {
-    fontSize: 14,
-    marginTop: 4,
-    fontWeight: '600',
+    ...Typography.titleSmall,
+    marginTop: Spacing.xs,
   },
   notificationButton: {
     width: 48,
@@ -952,70 +1018,81 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+
+  // Daily Spending Card
   dailySpendingCard: {
-    marginBottom: 16,
+    marginBottom: Spacing.md,
   },
   dailySpendingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: Spacing.md,
   },
   dailySpendingLabel: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
+    ...Typography.titleMedium,
+    marginBottom: Spacing.xs,
   },
   dailySpendingDate: {
-    fontSize: 12,
-    fontWeight: '500',
+    ...Typography.labelMedium,
   },
   dailySpendingAmounts: {
     alignItems: 'flex-end',
   },
   dailySpendingValue: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    ...Typography.displaySmall,
+    marginBottom: Spacing.xs,
   },
   rolloverBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Spacing.xs,
     marginTop: 2,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
   },
   rolloverText: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...Typography.labelMedium,
   },
+
+  // Progress Bar with Neon Glow
   progressBarContainer: {
     height: 12,
     borderRadius: 6,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
+  },
+  progressBarGlow: {
+    height: '100%',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 6,
   },
   progressBarFill: {
     height: '100%',
     borderRadius: 6,
   },
+
+  // Status
   dailyStatusContainer: {
     alignItems: 'flex-start',
   },
   dailyStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Spacing.sm,
   },
   dailyStatusText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...Typography.titleSmall,
   },
 
-  // Dashboard Metrics
+  // Metrics
   metricsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   metricCard: {
     flex: 1,
@@ -1024,58 +1101,57 @@ const styles = StyleSheet.create({
   metricIconBg: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: BorderRadius.md,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   metricValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    ...Typography.headlineSmall,
+    marginBottom: Spacing.xs,
   },
   metricLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...Typography.labelMedium,
   },
 
   // Log Spending Button
   logSpendingButton: {
-    borderRadius: 20,
+    borderRadius: BorderRadius.xl,
     overflow: 'hidden',
-    marginBottom: 24,
+    marginBottom: Spacing.lg,
     shadowColor: '#14B8A6',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 8,
   },
   logSpendingGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    gap: 10,
+    paddingVertical: Spacing.md,
+    gap: Spacing.sm,
   },
   logSpendingText: {
-    fontSize: 17,
-    fontWeight: 'bold',
+    ...Typography.titleMedium,
     color: '#FFFFFF',
+    fontWeight: '700',
   },
 
+  // Budget Section
   budgetSection: {
-    marginBottom: 24,
+    marginBottom: Spacing.lg,
   },
   budgetSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: Spacing.md,
   },
   budgetHeaderActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
   },
   addButton: {
     width: 36,
@@ -1090,51 +1166,51 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    ...Typography.headlineSmall,
   },
   budgetGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: Spacing.md,
   },
   budgetCategoryCard: {
-    width: (width - 56) / 2,
-    borderRadius: 20,
-    padding: 16,
+    width: (width - Spacing.lg * 2 - Spacing.md) / 2,
     alignItems: 'center',
+  },
+
+  // Quick Log
+  quickLogSection: {
+    marginBottom: Spacing.lg,
   },
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 24,
-    marginTop: 12,
+    marginTop: Spacing.md,
   },
   quickAction: {
-    width: (width - 60) / 4,
-    borderRadius: 16,
+    width: (width - Spacing.lg * 2 - Spacing.md * 3) / 4,
+    borderRadius: BorderRadius.lg,
     overflow: 'hidden',
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
   },
   quickActionGradient: {
-    padding: 16,
+    padding: Spacing.md,
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
   },
   quickActionText: {
-    fontSize: 11,
-    fontWeight: '600',
+    ...Typography.labelSmall,
     color: '#FFFFFF',
     textAlign: 'center',
   },
 
   // Momentum Streak
   momentumStreakCard: {
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
   },
   momentumStreakContent: {
     flexDirection: 'row',
@@ -1144,13 +1220,16 @@ const styles = StyleSheet.create({
   momentumStreakLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
     flex: 1,
   },
-  streakIconLarge: {
+  streakFireWrap: {
     width: 52,
     height: 52,
-    borderRadius: 16,
+    position: 'relative',
+  },
+  streakEmojiOverlay: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1161,36 +1240,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   momentumStreakTitle: {
-    fontSize: 16,
+    ...Typography.titleMedium,
     fontWeight: '700',
     marginBottom: 2,
   },
   momentumStreakSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
+    ...Typography.bodySmall,
   },
   momentumStreakRight: {
     alignItems: 'center',
-    paddingLeft: 12,
+    paddingLeft: Spacing.md,
   },
   momentumStreakValue: {
     fontSize: 36,
-    fontWeight: 'bold',
+    fontWeight: '800',
     lineHeight: 40,
+    letterSpacing: -1,
   },
   momentumStreakLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    ...Typography.labelSmall,
     marginTop: 2,
   },
   streakDotsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 14,
-    paddingTop: 14,
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.06)',
   },
   streakDot: {
     width: 10,
@@ -1198,134 +1275,110 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   streakDotsMore: {
-    fontSize: 13,
+    ...Typography.labelMedium,
     fontWeight: '700',
     marginLeft: 2,
-  },
-
-  // Log Spending Modal
-  logStatusCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-  },
-  logStatusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  logStatusLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  logStatusValue: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  logStatusDivider: {
-    height: 1,
-    marginVertical: 8,
-  },
-  logStatusLabelBold: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  logStatusValueBold: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  spendingPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 12,
-  },
-  spendingPreviewText: {
-    fontSize: 13,
-    fontWeight: '600',
-    flex: 1,
   },
 
   // Shared Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
-    paddingBottom: 40,
-    maxHeight: '80%',
+    borderTopLeftRadius: BorderRadius.xxl + 8,
+    borderTopRightRadius: BorderRadius.xxl + 8,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl,
+    maxHeight: '85%',
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: Spacing.md,
+    opacity: 0.4,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: Spacing.lg,
   },
   modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    ...Typography.headlineMedium,
   },
-  emptyStateCard: {
-    padding: 32,
+
+  // Log Spending Modal
+  logStatusCard: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  logStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: Spacing.sm,
   },
-  emptyStateEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
+  logStatusLabel: {
+    ...Typography.bodyMedium,
   },
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    textAlign: 'center',
+  logStatusValue: {
+    ...Typography.titleMedium,
   },
-  emptyStateText: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+  logStatusDivider: {
+    height: 1,
+    marginVertical: Spacing.sm,
   },
-  createFirstItemButton: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#14B8A6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+  logStatusLabelBold: {
+    ...Typography.titleSmall,
+    fontWeight: '700',
   },
-  createFirstItemGradient: {
+  logStatusValueBold: {
+    ...Typography.titleLarge,
+    fontWeight: '800',
+  },
+  spendingPreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginTop: Spacing.md,
   },
-  createFirstItemText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+  spendingPreviewText: {
+    ...Typography.labelLarge,
+    flex: 1,
   },
+
+  // Budget Modal Items
   budgetInputRow: {
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
   },
   budgetInputHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   budgetInputLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
+  },
+  budgetItemIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   deleteItemButton: {
     width: 36,
@@ -1335,70 +1388,70 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   budgetInputName: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...Typography.titleMedium,
   },
   budgetInputField: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.md,
   },
   currencySymbol: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginRight: 8,
+    ...Typography.headlineSmall,
+    fontWeight: '700',
+    marginRight: Spacing.sm,
   },
   budgetInput: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: 'bold',
-    paddingVertical: 12,
+    ...Typography.headlineSmall,
+    fontWeight: '700',
+    paddingVertical: Spacing.md,
   },
   saveButton: {
-    marginTop: 24,
-    borderRadius: 24,
+    marginTop: Spacing.lg,
+    borderRadius: BorderRadius.xxl,
     overflow: 'hidden',
     shadowColor: '#14B8A6',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowRadius: 14,
+    elevation: 8,
   },
   saveButtonGradient: {
     paddingVertical: 18,
     alignItems: 'center',
   },
   saveButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...Typography.titleLarge,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
+
+  // Add Budget Item Modal
   inputSection: {
-    marginBottom: 24,
+    marginBottom: Spacing.lg,
   },
   inputLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 12,
+    ...Typography.titleSmall,
+    marginBottom: Spacing.md,
   },
   textInput: {
-    borderRadius: 12,
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 14,
-    fontSize: 16,
+    ...Typography.bodyLarge,
   },
   iconGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: Spacing.md,
   },
   iconOption: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1406,12 +1459,12 @@ const styles = StyleSheet.create({
   colorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: Spacing.md,
   },
   colorOption: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: BorderRadius.lg,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
@@ -1426,28 +1479,28 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   previewSection: {
-    marginBottom: 16,
+    marginBottom: Spacing.md,
   },
   previewCard: {
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    padding: Spacing.lg,
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
   },
   previewIcon: {
     width: 72,
     height: 72,
-    borderRadius: 20,
+    borderRadius: BorderRadius.xl,
     justifyContent: 'center',
     alignItems: 'center',
   },
   previewText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...Typography.titleLarge,
+    fontWeight: '700',
   },
   previewAllocation: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 8,
+    ...Typography.titleSmall,
+    marginTop: Spacing.sm,
   },
 });
