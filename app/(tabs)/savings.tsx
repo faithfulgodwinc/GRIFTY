@@ -8,288 +8,362 @@ import {
   TextInput,
   Modal,
   Alert,
-  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Gradients } from '@/constants/Colors';
+import { getThemeColors, getGradients } from '@/constants/Colors';
 import { GlassCard } from '@/components/GlassCard';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { storage } from '@/utils/storage';
 import { supabaseSync } from '@/utils/supabase-sync';
+import { useTheme } from '@/contexts/ThemeContext';
+import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
-const FINANCIAL_HACKS = [
-  { id: '1', title: 'Meal Prep Hacks', emoji: '🥗', category: 'Groceries' },
-  { id: '2', title: 'Bulk-Buying Tips', emoji: '🛒', category: 'Savings' },
-  { id: '3', title: 'Coupon Codes', emoji: '💰', category: 'Deals' },
-  { id: '4', title: 'Kids Activities', emoji: '🎨', category: 'Free Fun' },
-];
+interface SavingsWin {
+  id: string;
+  date: string;
+  amount: number;
+  description: string;
+}
 
 export default function SavingsScreen() {
-  const [showExpenseModal, setShowExpenseModal] = useState(false);
-  const [amount, setAmount] = useState('');
-  const [description, setDescription] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('groceries');
-  const [streakDays, setStreakDays] = useState(0);
+  const [showAddSavingsModal, setShowAddSavingsModal] = useState(false);
+  const [savingsAmount, setSavingsAmount] = useState('');
+  const [savingsDescription, setSavingsDescription] = useState('');
+  const [totalSavings, setTotalSavings] = useState(0);
+  const [savingsGoal, setSavingsGoal] = useState(0);
+  const [savingsWins, setSavingsWins] = useState<SavingsWin[]>([]);
   const [currency, setCurrency] = useState('£');
+  const [isLoading, setIsLoading] = useState(true);
+  const { theme } = useTheme();
+
+  const Colors = getThemeColors(theme === 'dark');
+  const Gradients = getGradients(theme === 'dark');
 
   useEffect(() => {
-    loadUserData();
+    loadData();
   }, []);
 
-  const loadUserData = async () => {
+  const loadData = async () => {
     try {
+      setIsLoading(true);
       const [financialData, userData] = await Promise.all([
         storage.getFinancialData(),
-        storage.getUserData()
+        storage.getUserData(),
       ]);
 
-      if (financialData && financialData.streakDays !== undefined) {
-        setStreakDays(financialData.streakDays);
+      if (financialData) {
+        setTotalSavings(financialData.monthlySavings || 0);
+        setSavingsGoal(financialData.savingsGoal || 0);
+        setCurrency(financialData.currency || '£');
       }
 
-      if (userData && userData.currency) {
-        setCurrency(userData.currency);
+      if (userData) {
+        setCurrency(userData.currency || '£');
       }
+
+      // Load savings wins from storage (for now, mock data)
+      const mockWins: SavingsWin[] = [
+        {
+          id: '1',
+          date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          amount: 50,
+          description: 'Weekly meal prep savings',
+        },
+        {
+          id: '2',
+          date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          amount: 120,
+          description: 'Cancelled unused subscriptions',
+        },
+        {
+          id: '3',
+          date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+          amount: 75,
+          description: 'Bulk shopping discounts',
+        },
+      ];
+      setSavingsWins(mockWins);
     } catch (error) {
-      console.error('Failed to load user data:', error);
+      console.error('Failed to load savings data:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const categories = [
-    { id: 'groceries', label: 'Groceries', color: Colors.radiantMagenta, icon: 'cart' },
-    { id: 'kids', label: 'Kids', color: Colors.sunKissedAmber, icon: 'people' },
-    { id: 'self-care', label: 'Self-Care', color: Colors.electricTeal, icon: 'sparkles' },
-    { id: 'home', label: 'Home', color: Colors.vibrantPurple, icon: 'home' },
-  ];
-
-  const handleAddExpense = async () => {
-    if (!amount || parseFloat(amount) <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount.');
+  const handleAddSavings = async () => {
+    if (!savingsAmount || parseFloat(savingsAmount) <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid savings amount.');
       return;
     }
 
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      const expenses = await storage.getExpenses();
-      const newExpense = {
+      const amount = parseFloat(savingsAmount);
+      const newWin: SavingsWin = {
         id: Date.now().toString(),
-        amount: parseFloat(amount),
-        category: selectedCategory,
-        description,
         date: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
+        amount,
+        description: savingsDescription || 'Savings added',
       };
 
-      // Save locally
-      await storage.setExpenses([...expenses, newExpense]);
+      const newTotalSavings = totalSavings + amount;
+      setTotalSavings(newTotalSavings);
+      setSavingsWins([newWin, ...savingsWins]);
 
-      // Update financial data locally
+      // Update financial data
       const financialData = await storage.getFinancialData();
       if (financialData) {
-        financialData.dailySpending += parseFloat(amount);
+        financialData.monthlySavings = newTotalSavings;
         await storage.setFinancialData(financialData);
 
         // Sync to Supabase (non-blocking)
-        supabaseSync.syncFinancialData(financialData).catch(err =>
+        supabaseSync.syncFinancialData(financialData).catch((err) =>
           console.error('Failed to sync financial data:', err)
         );
       }
 
-      // Sync expense to Supabase (non-blocking)
-      supabaseSync.addExpense({
-        amount: parseFloat(amount),
-        category: selectedCategory,
-        description,
-        date: new Date().toISOString().split('T')[0],
-      }).catch(err => console.error('Failed to sync expense:', err));
-
-      setShowExpenseModal(false);
-      setAmount('');
-      setDescription('');
+      setShowAddSavingsModal(false);
+      setSavingsAmount('');
+      setSavingsDescription('');
     } catch (error) {
-      console.error('Failed to add expense:', error);
-      Alert.alert('Error', 'Failed to add expense. Please try again.');
+      console.error('Failed to add savings:', error);
+      Alert.alert('Error', 'Failed to add savings. Please try again.');
     }
   };
+
+  const calculateProgress = () => {
+    if (savingsGoal === 0) return 0;
+    return Math.min((totalSavings / savingsGoal) * 100, 100);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  if (isLoading) {
+    return (
+      <LinearGradient colors={Gradients.background} style={styles.container}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.electricTeal} />
+          <Text style={[styles.loadingText, { color: Colors.secondaryText }]}>
+            Loading your savings...
+          </Text>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  const progressPercentage = calculateProgress();
 
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => {}}>
-            <Ionicons name="arrow-back" size={24} color={Colors.primaryText} />
+          <View>
+            <Text style={[styles.title, { color: Colors.primaryText }]}>Savings Hub</Text>
+            <Text style={[styles.subtitle, { color: Colors.electricTeal }]}>Build Your Wealth</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.settingsButton, { backgroundColor: Colors.cardBackground, borderColor: Colors.glassBorder }]}
+            onPress={() => router.push('/(tabs)/profile')}
+          >
+            <Ionicons name="settings-outline" size={24} color={Colors.electricTeal} />
           </TouchableOpacity>
-          <Text style={styles.title}>Savings Hub</Text>
-          <View style={{ width: 24 }} />
         </View>
 
-        {/* Receipt Scanner */}
-        <TouchableOpacity
-          style={styles.scannerCard}
-          onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy)}
-          activeOpacity={0.9}
-        >
-          <LinearGradient
-            colors={['#E11D48', '#F59E0B']}
-            style={styles.scannerGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View style={styles.cameraIcon}>
-              <Ionicons name="camera" size={48} color={Colors.white} />
+        {/* Total Savings Card */}
+        <GlassCard style={styles.totalSavingsCard}>
+          <View style={styles.totalSavingsHeader}>
+            <Text style={[styles.sectionLabel, { color: Colors.secondaryText }]}>Total Savings</Text>
+            <View style={[styles.trendBadge, { backgroundColor: Colors.glowingGreen + '20' }]}>
+              <Ionicons name="trending-up" size={14} color={Colors.glowingGreen} />
+              <Text style={[styles.trendText, { color: Colors.glowingGreen }]}>Growing</Text>
             </View>
-            <Text style={styles.scannerTitle}>Scan Receipt for Savings</Text>
-            <Text style={styles.scannerSubtitle}>AI-powered expense tracking</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Mom-Tip Carousel */}
-        <View style={styles.carouselSection}>
-          <View style={styles.carouselHeader}>
-            <Text style={styles.sectionTitle}>Mom-Tip Carousel</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>Story &gt;</Text>
-            </TouchableOpacity>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.carousel}
-          >
-            {FINANCIAL_HACKS.map((hack) => (
-              <TouchableOpacity
-                key={hack.id}
-                style={styles.hackCard}
-                onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-              >
-                <GlassCard style={styles.hackCardInner}>
-                  <Text style={styles.hackEmoji}>{hack.emoji}</Text>
-                  <Text style={styles.hackTitle}>{hack.title}</Text>
-                  <Text style={styles.hackCategory}>{hack.category}</Text>
-                </GlassCard>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Savings Streaks */}
-        <GlassCard style={styles.streakCard}>
-          <View style={styles.streakHeader}>
-            <Text style={styles.sectionTitle}>Savings Streaks</Text>
-          </View>
-          <View style={styles.streakContent}>
-            <LinearGradient
-              colors={['#F59E0B', '#EF4444']}
-              style={styles.fireIcon}
-            >
-              <Text style={styles.fireEmoji}>🔥</Text>
-            </LinearGradient>
-            <Text style={styles.streakValue}>{streakDays}-Day Streak!</Text>
-          </View>
-          <Text style={styles.streakDescription}>
-            Keep it up! You&apos;re building amazing financial habits.
+          <Text style={[styles.totalSavingsValue, { color: Colors.primaryText }]}>
+            {currency}{totalSavings.toFixed(2)}
+          </Text>
+          <Text style={[styles.totalSavingsSubtext, { color: Colors.tertiaryText }]}>
+            Keep up the great work!
           </Text>
         </GlassCard>
 
-        {/* Quick Log Expenses */}
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setShowExpenseModal(true);
-          }}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={[Colors.electricTeal, Colors.glowingGreen]}
-            style={styles.addButtonGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            <Ionicons name="add" size={28} color={Colors.white} />
-            <Text style={styles.addButtonText}>Log Expense</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        {/* Savings Goal Progress */}
+        <GlassCard style={styles.goalCard}>
+          <View style={styles.goalHeader}>
+            <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Savings Goal</Text>
+            <Text style={[styles.goalPercentage, { color: Colors.electricTeal }]}>
+              {progressPercentage.toFixed(0)}%
+            </Text>
+          </View>
+
+          {/* Progress Ring Visualization */}
+          <View style={styles.goalVisualization}>
+            <View style={styles.progressRingContainer}>
+              <View style={[styles.progressRingBackground, { borderColor: Colors.lightCream }]}>
+                <View
+                  style={[
+                    styles.progressRingFill,
+                    {
+                      borderColor: Colors.electricTeal,
+                      transform: [{ rotate: `${(progressPercentage / 100) * 360}deg` }],
+                    },
+                  ]}
+                />
+              </View>
+              <View style={styles.progressRingCenter}>
+                <Text style={[styles.progressRingValue, { color: Colors.primaryText }]}>
+                  {currency}{totalSavings.toFixed(0)}
+                </Text>
+                <Text style={[styles.progressRingLabel, { color: Colors.tertiaryText }]}>saved</Text>
+              </View>
+            </View>
+
+            <View style={styles.goalDetails}>
+              <View style={styles.goalDetailRow}>
+                <Text style={[styles.goalDetailLabel, { color: Colors.secondaryText }]}>Goal</Text>
+                <Text style={[styles.goalDetailValue, { color: Colors.primaryText }]}>
+                  {currency}{savingsGoal.toFixed(0)}
+                </Text>
+              </View>
+              <View style={styles.goalDetailRow}>
+                <Text style={[styles.goalDetailLabel, { color: Colors.secondaryText }]}>Remaining</Text>
+                <Text style={[styles.goalDetailValue, { color: Colors.electricTeal }]}>
+                  {currency}{Math.max(savingsGoal - totalSavings, 0).toFixed(0)}
+                </Text>
+              </View>
+              {progressPercentage >= 100 ? (
+                <View style={styles.goalAchievedBanner}>
+                  <LinearGradient
+                    colors={[Colors.electricTeal, Colors.glowingGreen]}
+                    style={styles.goalAchievedGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Ionicons name="trophy" size={20} color={Colors.white} />
+                    <Text style={styles.goalAchievedText}>Goal Achieved! 🎉</Text>
+                  </LinearGradient>
+                </View>
+              ) : (
+                <Text style={[styles.goalMotivation, { color: Colors.tertiaryText }]}>
+                  You&apos;re {progressPercentage.toFixed(0)}% of the way there!
+                </Text>
+              )}
+            </View>
+          </View>
+        </GlassCard>
+
+        {/* Savings Wins History */}
+        <View style={styles.winsSection}>
+          <View style={styles.winsSectionHeader}>
+            <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Savings Wins</Text>
+            <TouchableOpacity
+              style={[styles.addWinButton, { backgroundColor: Colors.electricTeal }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setShowAddSavingsModal(true);
+              }}
+            >
+              <Ionicons name="add" size={20} color={Colors.white} />
+            </TouchableOpacity>
+          </View>
+
+          {savingsWins.length === 0 ? (
+            <GlassCard style={styles.emptyWinsCard}>
+              <Text style={styles.emptyWinsEmoji}>🏆</Text>
+              <Text style={[styles.emptyWinsText, { color: Colors.primaryText }]}>
+                No savings wins yet
+              </Text>
+              <Text style={[styles.emptyWinsSubtext, { color: Colors.secondaryText }]}>
+                Start tracking your savings achievements!
+              </Text>
+            </GlassCard>
+          ) : (
+            savingsWins.map((win) => (
+              <GlassCard key={win.id} style={styles.winCard}>
+                <View style={styles.winContent}>
+                  <View style={[styles.winIconContainer, { backgroundColor: Colors.glowingGreen + '20' }]}>
+                    <Ionicons name="checkmark-circle" size={24} color={Colors.glowingGreen} />
+                  </View>
+                  <View style={styles.winDetails}>
+                    <Text style={[styles.winDescription, { color: Colors.primaryText }]}>
+                      {win.description}
+                    </Text>
+                    <Text style={[styles.winDate, { color: Colors.tertiaryText }]}>
+                      {formatDate(win.date)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.winAmount, { color: Colors.glowingGreen }]}>
+                    +{currency}{win.amount.toFixed(0)}
+                  </Text>
+                </View>
+              </GlassCard>
+            ))
+          )}
+        </View>
+
+        {/* Tips Card */}
+        <GlassCard style={styles.tipsCard}>
+          <View style={styles.tipsHeader}>
+            <Ionicons name="bulb" size={24} color={Colors.sunKissedAmber} />
+            <Text style={[styles.tipsTitle, { color: Colors.primaryText }]}>Savings Tip</Text>
+          </View>
+          <Text style={[styles.tipsText, { color: Colors.secondaryText }]}>
+            Automate your savings! Set aside a fixed amount each week before spending on anything else.
+            Even small amounts add up over time.
+          </Text>
+        </GlassCard>
       </ScrollView>
 
-      {/* Expense Modal */}
+      {/* Add Savings Modal */}
       <Modal
-        visible={showExpenseModal}
+        visible={showAddSavingsModal}
         animationType="slide"
         transparent
-        onRequestClose={() => setShowExpenseModal(false)}
+        onRequestClose={() => setShowAddSavingsModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: Colors.cardBackground }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Log Expense</Text>
-              <TouchableOpacity onPress={() => setShowExpenseModal(false)}>
+              <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>Add Savings Win</Text>
+              <TouchableOpacity onPress={() => setShowAddSavingsModal(false)}>
                 <Ionicons name="close" size={28} color={Colors.primaryText} />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.inputLabel}>Amount</Text>
-            <View style={styles.amountInput}>
-              <Text style={styles.currencySymbol}>{currency}</Text>
+            <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Amount Saved</Text>
+            <View style={[styles.amountInput, { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder }]}>
+              <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: Colors.primaryText }]}
                 placeholder="0.00"
                 placeholderTextColor={Colors.mediumGray}
                 keyboardType="decimal-pad"
-                value={amount}
-                onChangeText={setAmount}
+                value={savingsAmount}
+                onChangeText={setSavingsAmount}
               />
             </View>
 
-            <Text style={styles.inputLabel}>Category</Text>
-            <View style={styles.categoriesGrid}>
-              {categories.map((cat) => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.categoryButton,
-                    selectedCategory === cat.id && styles.categoryButtonActive,
-                  ]}
-                  onPress={() => {
-                    setSelectedCategory(cat.id);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                >
-                  <Ionicons
-                    name={cat.icon as any}
-                    size={24}
-                    color={selectedCategory === cat.id ? cat.color : Colors.mediumGray}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryLabel,
-                      selectedCategory === cat.id && { color: cat.color },
-                    ]}
-                  >
-                    {cat.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.inputLabel}>Description (Optional)</Text>
+            <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Description</Text>
             <TextInput
-              style={styles.textInput}
-              placeholder="e.g., Weekly grocery shopping"
+              style={[styles.textInput, { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder, color: Colors.primaryText }]}
+              placeholder="e.g., Meal prep saved £50 this week"
               placeholderTextColor={Colors.mediumGray}
-              value={description}
-              onChangeText={setDescription}
+              value={savingsDescription}
+              onChangeText={setSavingsDescription}
               multiline
             />
 
             <TouchableOpacity
               style={styles.submitButton}
-              onPress={handleAddExpense}
+              onPress={handleAddSavings}
               activeOpacity={0.8}
             >
               <LinearGradient
@@ -298,7 +372,7 @@ export default function SavingsScreen() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Text style={styles.submitButtonText}>Add Expense</Text>
+                <Text style={styles.submitButtonText}>Add Savings Win</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -317,6 +391,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 30,
   },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -324,142 +408,238 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.primaryText,
   },
-  scannerCard: {
-    marginBottom: 30,
+  subtitle: {
+    fontSize: 14,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  settingsButton: {
+    width: 48,
+    height: 48,
     borderRadius: 24,
-    overflow: 'hidden',
-    elevation: 8,
-    shadowColor: Colors.radiantMagenta,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-  },
-  scannerGradient: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  cameraIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  scannerTitle: {
+  totalSavingsCard: {
+    marginBottom: 20,
+  },
+  totalSavingsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  trendBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  trendText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  totalSavingsValue: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  totalSavingsSubtext: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  goalCard: {
+    marginBottom: 20,
+  },
+  goalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.white,
-    marginBottom: 8,
   },
-  scannerSubtitle: {
+  goalPercentage: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  goalVisualization: {
+    flexDirection: 'row',
+    gap: 20,
+  },
+  progressRingContainer: {
+    width: 120,
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressRingBackground: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 12,
+    position: 'absolute',
+  },
+  progressRingFill: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 12,
+    borderRightColor: 'transparent',
+    borderBottomColor: 'transparent',
+  },
+  progressRingCenter: {
+    alignItems: 'center',
+  },
+  progressRingValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  progressRingLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  goalDetails: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  goalDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  goalDetailLabel: {
     fontSize: 14,
-    color: Colors.white,
-    opacity: 0.9,
+    fontWeight: '500',
   },
-  carouselSection: {
-    marginBottom: 30,
+  goalDetailValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
-  carouselHeader: {
+  goalAchievedBanner: {
+    marginTop: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  goalAchievedGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  goalAchievedText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  goalMotivation: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 8,
+  },
+  winsSection: {
+    marginBottom: 20,
+  },
+  winsSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.primaryText,
-  },
-  seeAllText: {
-    fontSize: 14,
-    color: Colors.electricTeal,
-    fontWeight: '600',
-  },
-  carousel: {
-    paddingRight: 20,
-    gap: 12,
-  },
-  hackCard: {
-    width: 150,
-  },
-  hackCardInner: {
+  addWinButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#14B8A6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  hackEmoji: {
-    fontSize: 48,
-    marginBottom: 12,
+  emptyWinsCard: {
+    alignItems: 'center',
+    paddingVertical: 32,
   },
-  hackTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.primaryText,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  hackCategory: {
-    fontSize: 12,
-    color: Colors.electricTeal,
-    fontWeight: '600',
-  },
-  streakCard: {
-    marginBottom: 30,
-  },
-  streakHeader: {
+  emptyWinsEmoji: {
+    fontSize: 64,
     marginBottom: 16,
   },
-  streakContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  fireIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  fireEmoji: {
-    fontSize: 32,
-  },
-  streakValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: Colors.primaryText,
-  },
-  streakDescription: {
-    fontSize: 14,
-    color: Colors.secondaryText,
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  addButton: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    elevation: 6,
-    shadowColor: Colors.electricTeal,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-  },
-  addButtonGradient: {
-    flexDirection: 'row',
-    paddingVertical: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  addButtonText: {
+  emptyWinsText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.white,
+    marginBottom: 8,
+  },
+  emptyWinsSubtext: {
+    fontSize: 14,
+  },
+  winCard: {
+    marginBottom: 12,
+  },
+  winContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  winIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  winDetails: {
+    flex: 1,
+  },
+  winDescription: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  winDate: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  winAmount: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  tipsCard: {
+    marginBottom: 20,
+  },
+  tipsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  tipsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  tipsText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
   },
   modalOverlay: {
     flex: 1,
@@ -467,7 +647,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: Colors.white,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     padding: 24,
@@ -482,73 +661,37 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.primaryText,
   },
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.primaryText,
     marginBottom: 12,
     marginTop: 16,
   },
   amountInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.lightCream,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.glassBorder,
     paddingHorizontal: 20,
   },
   currencySymbol: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.electricTeal,
     marginRight: 8,
   },
   input: {
     flex: 1,
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.primaryText,
     paddingVertical: 16,
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  categoryButton: {
-    width: (width - 84) / 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.lightCream,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  categoryButtonActive: {
-    borderColor: Colors.electricTeal,
-    borderWidth: 2,
-    backgroundColor: Colors.white,
-  },
-  categoryLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.mediumGray,
   },
   textInput: {
-    backgroundColor: Colors.lightCream,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.glassBorder,
     paddingHorizontal: 20,
     paddingVertical: 16,
     fontSize: 16,
-    color: Colors.primaryText,
     minHeight: 80,
     textAlignVertical: 'top',
   },
@@ -557,7 +700,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     overflow: 'hidden',
     elevation: 6,
-    shadowColor: Colors.electricTeal,
+    shadowColor: '#14B8A6',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
     shadowRadius: 12,
@@ -569,6 +712,6 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: '#FFFFFF',
   },
 });

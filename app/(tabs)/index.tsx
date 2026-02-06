@@ -20,7 +20,6 @@ import { BudgetCategory, FinancialData } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
-import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
@@ -55,6 +54,7 @@ export default function HomeScreen() {
   const [newItemName, setNewItemName] = useState('');
   const [newItemIcon, setNewItemIcon] = useState('home');
   const [newItemColor, setNewItemColor] = useState('#E11D48');
+  const [newItemAllocation, setNewItemAllocation] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { theme } = useTheme();
 
@@ -134,21 +134,18 @@ export default function HomeScreen() {
     }
   };
 
-  const handleSmartShopperPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    router.push('/smart-shopper');
-  };
-
   const handleAddBudgetItem = () => {
     if (!newItemName.trim()) {
       Alert.alert('Required', 'Please enter a budget item name');
       return;
     }
 
+    const allocation = parseFloat(newItemAllocation) || 0;
+
     const newItem: BudgetCategory = {
       id: Date.now().toString(),
       name: newItemName.trim(),
-      allocated: 0,
+      allocated: allocation,
       spent: 0,
       icon: newItemIcon,
       color: newItemColor,
@@ -158,6 +155,7 @@ export default function HomeScreen() {
     setNewItemName('');
     setNewItemIcon('home');
     setNewItemColor('#E11D48');
+    setNewItemAllocation('');
     setShowAddItemModal(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
@@ -208,7 +206,6 @@ export default function HomeScreen() {
     );
   }
 
-  const budgetHealthScore = financialData.budgetHealthScore || calculateBudgetHealth();
   const currency = financialData?.currency || '£';
 
   const getGreeting = () => {
@@ -238,19 +235,64 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Budget Health Score */}
-        <GlassCard style={styles.healthCard}>
-          <View style={styles.healthHeader}>
-            <Text style={[styles.healthLabel, { color: Colors.primaryText }]}>Budget Health:</Text>
+        {/* Daily Spending Tracker */}
+        <GlassCard style={styles.dailySpendingCard}>
+          <View style={styles.dailySpendingHeader}>
+            <View>
+              <Text style={[styles.dailySpendingLabel, { color: Colors.secondaryText }]}>Today&apos;s Spending</Text>
+              <Text style={[styles.dailySpendingDate, { color: Colors.tertiaryText }]}>
+                {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+              </Text>
+            </View>
+            <View style={styles.dailySpendingAmounts}>
+              <Text style={[styles.dailySpendingValue, { color: Colors.primaryText }]}>
+                {currency}{financialData.dailySpending.toFixed(2)}
+              </Text>
+              <View style={styles.dailyBudgetRow}>
+                <Text style={[styles.dailyBudgetLabel, { color: Colors.tertiaryText }]}>of </Text>
+                <Text style={[styles.dailyBudgetValue, { color: Colors.electricTeal }]}>
+                  {currency}{financialData.dailyBudget.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Progress Bar */}
+          <View style={[styles.progressBarContainer, { backgroundColor: Colors.lightCream }]}>
             <LinearGradient
-              colors={[Colors.electricTeal, Colors.amethyst]}
-              style={styles.healthScore}
+              colors={
+                financialData.dailySpending > financialData.dailyBudget
+                  ? [Colors.radiantMagenta, Colors.sunKissedAmber]
+                  : [Colors.electricTeal, Colors.glowingGreen]
+              }
+              style={[
+                styles.progressBarFill,
+                {
+                  width: `${Math.min((financialData.dailySpending / financialData.dailyBudget) * 100, 100)}%`,
+                },
+              ]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-            >
-              <Text style={styles.healthValue}>{budgetHealthScore}</Text>
-              <Text style={styles.healthMax}>/100</Text>
-            </LinearGradient>
+            />
+          </View>
+
+          {/* Status Message */}
+          <View style={styles.dailyStatusContainer}>
+            {financialData.dailySpending <= financialData.dailyBudget ? (
+              <View style={styles.dailyStatusRow}>
+                <Ionicons name="checkmark-circle" size={16} color={Colors.glowingGreen} />
+                <Text style={[styles.dailyStatusText, { color: Colors.glowingGreen }]}>
+                  {currency}{(financialData.dailyBudget - financialData.dailySpending).toFixed(2)} left today
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.dailyStatusRow}>
+                <Ionicons name="alert-circle" size={16} color={Colors.radiantMagenta} />
+                <Text style={[styles.dailyStatusText, { color: Colors.radiantMagenta }]}>
+                  {currency}{(financialData.dailySpending - financialData.dailyBudget).toFixed(2)} over budget
+                </Text>
+              </View>
+            )}
           </View>
         </GlassCard>
 
@@ -314,33 +356,6 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
-
-        {/* Smart Shopper Tool */}
-        <TouchableOpacity
-          style={styles.smartShopperCard}
-          onPress={handleSmartShopperPress}
-          activeOpacity={0.9}
-        >
-          <LinearGradient
-            colors={[Colors.amethyst, Colors.electricTeal]}
-            style={styles.smartShopperGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View style={styles.smartShopperContent}>
-              <View style={styles.smartShopperIcon}>
-                <Ionicons name="camera" size={40} color={Colors.white} />
-              </View>
-              <View style={styles.smartShopperText}>
-                <Text style={styles.smartShopperTitle}>Smart Shopper 🛍️</Text>
-                <Text style={styles.smartShopperSubtitle}>
-                  Scan products, find cheaper alternatives
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={28} color={Colors.white} />
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
 
         {/* Quick-Log */}
         <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Quick-Log</Text>
@@ -552,6 +567,22 @@ export default function HomeScreen() {
                 </View>
               </View>
 
+              {/* Allocation Amount */}
+              <View style={styles.inputSection}>
+                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Allocate Money (Optional)</Text>
+                <View style={[styles.budgetInputField, { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder }]}>
+                  <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
+                  <TextInput
+                    style={[styles.budgetInput, { color: Colors.primaryText }]}
+                    placeholder="0"
+                    placeholderTextColor={Colors.mediumGray}
+                    keyboardType="numeric"
+                    value={newItemAllocation}
+                    onChangeText={setNewItemAllocation}
+                  />
+                </View>
+              </View>
+
               {/* Preview */}
               <View style={styles.previewSection}>
                 <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Preview</Text>
@@ -562,6 +593,11 @@ export default function HomeScreen() {
                   <Text style={[styles.previewText, { color: Colors.primaryText }]}>
                     {newItemName || 'Budget Item Name'}
                   </Text>
+                  {newItemAllocation && parseFloat(newItemAllocation) > 0 && (
+                    <Text style={[styles.previewAllocation, { color: Colors.electricTeal }]}>
+                      {currency}{parseFloat(newItemAllocation).toFixed(2)} allocated
+                    </Text>
+                  )}
                 </View>
               </View>
             </ScrollView>
@@ -661,35 +697,65 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  healthCard: {
+  dailySpendingCard: {
     marginBottom: 24,
   },
-  healthHeader: {
+  dailySpendingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    marginBottom: 16,
   },
-  healthLabel: {
+  dailySpendingLabel: {
     fontSize: 18,
     fontWeight: '600',
+    marginBottom: 4,
   },
-  healthScore: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 16,
+  dailySpendingDate: {
+    fontSize: 12,
+    fontWeight: '500',
   },
-  healthValue: {
+  dailySpendingAmounts: {
+    alignItems: 'flex-end',
+  },
+  dailySpendingValue: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    marginBottom: 4,
   },
-  healthMax: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    opacity: 0.7,
-    marginLeft: 4,
+  dailyBudgetRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  dailyBudgetLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  dailyBudgetValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  progressBarContainer: {
+    height: 12,
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 6,
+  },
+  dailyStatusContainer: {
+    alignItems: 'flex-start',
+  },
+  dailyStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dailyStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   budgetSection: {
     marginBottom: 24,
@@ -728,57 +794,9 @@ const styles = StyleSheet.create({
   },
   budgetCategoryCard: {
     width: (width - 56) / 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
     borderRadius: 20,
     padding: 16,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  smartShopperCard: {
-    marginBottom: 24,
-    borderRadius: 24,
-    overflow: 'hidden',
-    elevation: 8,
-    shadowColor: '#A855F7',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-  },
-  smartShopperGradient: {
-    padding: 20,
-  },
-  smartShopperContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  smartShopperIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  smartShopperText: {
-    flex: 1,
-  },
-  smartShopperTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  smartShopperSubtitle: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    opacity: 0.9,
   },
   quickActions: {
     flexDirection: 'row',
@@ -1051,5 +1069,10 @@ const styles = StyleSheet.create({
   previewText: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  previewAllocation: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
   },
 });
