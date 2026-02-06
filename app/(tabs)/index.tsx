@@ -7,23 +7,41 @@ import {
   TouchableOpacity,
   Dimensions,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Gradients } from '@/constants/Colors';
+import { getThemeColors, getGradients } from '@/constants/Colors';
 import { GlassCard } from '@/components/GlassCard';
-import { FinancialRing } from '@/components/FinancialRing';
+import { BudgetCategoryRing } from '@/components/BudgetCategoryRing';
 import { storage } from '@/utils/storage';
-import { FinancialData } from '@/types';
+import { BudgetCategory, FinancialData } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useTheme } from '@/contexts/ThemeContext';
+import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
+
+const DEFAULT_BUDGET_CATEGORIES: BudgetCategory[] = [
+  { id: 'household', name: 'Household', allocated: 0, spent: 0, icon: 'home', color: '#E11D48' },
+  { id: 'self-care', name: 'Self-Care', allocated: 0, spent: 0, icon: 'sparkles', color: '#EC4899' },
+  { id: 'education', name: 'Education', allocated: 0, spent: 0, icon: 'school', color: '#F59E0B' },
+  { id: 'emergency', name: 'Emergency', allocated: 0, spent: 0, icon: 'alert-circle', color: '#14B8A6' },
+];
 
 export default function HomeScreen() {
   const [financialData, setFinancialData] = useState<FinancialData | null>(null);
   const [userData, setUserData] = useState<any>(null);
+  const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>(DEFAULT_BUDGET_CATEGORIES);
   const [isLoading, setIsLoading] = useState(true);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { theme } = useTheme();
+
+  const Colors = getThemeColors(theme === 'dark');
+  const Gradients = getGradients(theme === 'dark');
 
   useEffect(() => {
     loadData();
@@ -43,6 +61,22 @@ export default function HomeScreen() {
 
       setFinancialData(financial);
       setUserData(user);
+
+      // Load or initialize budget categories
+      if (financial.budgetCategories && financial.budgetCategories.length > 0) {
+        setBudgetCategories(financial.budgetCategories);
+      } else {
+        // Initialize categories with default allocations
+        const totalIncome = financial.monthlyIncome || 0;
+        const savingsGoal = financial.savingsGoal || 0;
+        const availableForBudget = totalIncome - savingsGoal;
+
+        const initialCategories = DEFAULT_BUDGET_CATEGORIES.map((cat) => ({
+          ...cat,
+          allocated: availableForBudget * 0.25, // Evenly distribute 25% each
+        }));
+        setBudgetCategories(initialCategories);
+      }
     } catch (error) {
       console.error('Failed to load data:', error);
       setError('Unable to load your data. Please try again.');
@@ -51,12 +85,57 @@ export default function HomeScreen() {
     }
   };
 
+  const calculateBudgetHealth = () => {
+    if (!budgetCategories.length) return 100;
+
+    const totalAllocated = budgetCategories.reduce((sum, cat) => sum + cat.allocated, 0);
+    const totalSpent = budgetCategories.reduce((sum, cat) => sum + cat.spent, 0);
+
+    if (totalAllocated === 0) return 100;
+
+    const utilizationRate = (totalSpent / totalAllocated) * 100;
+
+    // Score: 100 for perfect budget adherence, decreasing as overspending occurs
+    if (utilizationRate <= 80) return 100;
+    if (utilizationRate <= 90) return 90;
+    if (utilizationRate <= 100) return 80;
+    return Math.max(0, 80 - (utilizationRate - 100));
+  };
+
+  const handleOpenBudgetSetup = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setShowBudgetModal(true);
+  };
+
+  const handleSaveBudgetAllocations = async () => {
+    try {
+      const updatedFinancialData: FinancialData = {
+        ...(financialData as FinancialData),
+        budgetCategories,
+        budgetHealthScore: calculateBudgetHealth(),
+      };
+
+      await storage.setFinancialData(updatedFinancialData);
+      setFinancialData(updatedFinancialData);
+      setShowBudgetModal(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Failed to save budget:', error);
+      Alert.alert('Save Failed', 'Unable to save budget allocations.');
+    }
+  };
+
+  const handleSmartShopperPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    router.push('/smart-shopper');
+  };
+
   if (isLoading) {
     return (
       <LinearGradient colors={Gradients.background} style={styles.container}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={Colors.electricTeal} />
-          <Text style={styles.loadingText}>Loading your dashboard...</Text>
+          <Text style={[styles.loadingText, { color: Colors.secondaryText }]}>Loading your dashboard...</Text>
         </View>
       </LinearGradient>
     );
@@ -67,9 +146,9 @@ export default function HomeScreen() {
       <LinearGradient colors={Gradients.background} style={styles.container}>
         <View style={styles.centerContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={Colors.radiantMagenta} />
-          <Text style={styles.errorText}>{error || 'Unable to load data'}</Text>
+          <Text style={[styles.errorText, { color: Colors.primaryText }]}>{error || 'Unable to load data'}</Text>
           <TouchableOpacity
-            style={styles.retryButton}
+            style={[styles.retryButton, { backgroundColor: Colors.electricTeal }]}
             onPress={loadData}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
@@ -79,19 +158,8 @@ export default function HomeScreen() {
     );
   }
 
-  const savingsProgress = financialData.savingsGoal > 0
-    ? (financialData.monthlySavings / financialData.savingsGoal) * 100
-    : 0;
-  const spendingProgress = financialData.dailyBudget > 0
-    ? (financialData.dailySpending / financialData.dailyBudget) * 100
-    : 0;
-
-  // Calculate dynamic wellness score (100 for new users with no spending)
-  const budgetPerformance = financialData.dailySpending === 0
-    ? 100
-    : Math.max(0, 100 - (spendingProgress - 100));
-  const savingsPerformance = Math.min(100, savingsProgress);
-  const wellnessScore = Math.round((budgetPerformance * 0.6) + (savingsPerformance * 0.4));
+  const budgetHealthScore = financialData.budgetHealthScore || calculateBudgetHealth();
+  const currency = financialData?.currency || '£';
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -100,177 +168,210 @@ export default function HomeScreen() {
     return 'Good Evening';
   };
 
-  const currency = financialData?.currency || '£';
-
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>{getGreeting()}! 👋</Text>
-            <Text style={styles.subtitle}>{userData?.name || 'Super Mom'}</Text>
+            <Text style={[styles.greeting, { color: Colors.primaryText }]}>{getGreeting()}! 👋</Text>
+            <Text style={[styles.subtitle, { color: Colors.electricTeal }]}>
+              {userData?.name || 'Mom Boss'}
+            </Text>
           </View>
           <TouchableOpacity
-            style={styles.notificationButton}
+            style={[styles.notificationButton, { backgroundColor: Colors.white, borderColor: Colors.glassBorder }]}
             onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
           >
             <Ionicons name="notifications-outline" size={24} color={Colors.primaryText} />
-            <View style={styles.notificationBadge} />
+            <View style={[styles.notificationBadge, { backgroundColor: Colors.radiantMagenta }]} />
           </TouchableOpacity>
         </View>
 
-        {/* Financial Rings */}
-        <GlassCard style={styles.ringsCard}>
-          <View style={styles.ringsContainer}>
-            <View style={styles.ringWrapper}>
-              <View style={styles.ring}>
-                <FinancialRing
-                  value={financialData.dailySpending}
-                  maxValue={financialData.dailyBudget}
-                  color={Colors.radiantMagenta}
-                  size={140}
-                  strokeWidth={12}
-                />
-                <View style={styles.ringCenter}>
-                  <FinancialRing
-                    value={financialData.monthlySavings}
-                    maxValue={financialData.savingsGoal}
-                    color={Colors.sunKissedAmber}
-                    size={100}
-                    strokeWidth={10}
-                  />
-                  <View style={styles.ringInner}>
-                    <FinancialRing
-                      value={financialData.dailySpending}
-                      maxValue={financialData.dailyBudget}
-                      color={Colors.electricTeal}
-                      size={60}
-                      strokeWidth={8}
-                    />
-                  </View>
-                </View>
-              </View>
-              <View style={styles.ringLabels}>
-                <View style={styles.ringLabel}>
-                  <View style={[styles.colorDot, { backgroundColor: Colors.radiantMagenta }]} />
-                  <Text style={styles.ringLabelText}>Daily Budget</Text>
-                </View>
-                <View style={styles.ringLabel}>
-                  <View style={[styles.colorDot, { backgroundColor: Colors.sunKissedAmber }]} />
-                  <Text style={styles.ringLabelText}>Monthly Goal</Text>
-                </View>
-                <View style={styles.ringLabel}>
-                  <View style={[styles.colorDot, { backgroundColor: Colors.electricTeal }]} />
-                  <Text style={styles.ringLabelText}>Grocery Savings</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Wellness Score */}
-            <View style={styles.wellnessScoreContainer}>
-              <Text style={styles.wellnessLabel}>Daily Wellness Score:</Text>
-              <LinearGradient
-                colors={Gradients.wellness}
-                style={styles.wellnessScore}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Text style={styles.wellnessValue}>{wellnessScore}</Text>
-                <Text style={styles.wellnessMax}>/100</Text>
-              </LinearGradient>
-            </View>
+        {/* Budget Health Score */}
+        <GlassCard style={styles.healthCard}>
+          <View style={styles.healthHeader}>
+            <Text style={[styles.healthLabel, { color: Colors.primaryText }]}>Budget Health:</Text>
+            <LinearGradient
+              colors={[Colors.electricTeal, Colors.amethyst]}
+              style={styles.healthScore}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Text style={styles.healthValue}>{budgetHealthScore}</Text>
+              <Text style={styles.healthMax}>/100</Text>
+            </LinearGradient>
           </View>
         </GlassCard>
 
-        {/* Quick Actions */}
-        <Text style={styles.sectionTitle}>Quick-Log</Text>
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={styles.quickAction}
-            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
-          >
-            <LinearGradient
-              colors={['#E11D48', '#C4124A']}
-              style={styles.quickActionGradient}
-            >
-              <Ionicons name="cart" size={28} color={Colors.white} />
-              <Text style={styles.quickActionText}>Groceries</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+        {/* Monthly Budget Categories */}
+        <View style={styles.budgetSection}>
+          <View style={styles.budgetSectionHeader}>
+            <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Monthly Budget</Text>
+            <TouchableOpacity onPress={handleOpenBudgetSetup}>
+              <Ionicons name="settings-outline" size={20} color={Colors.electricTeal} />
+            </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={styles.quickAction}
-            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
-          >
-            <LinearGradient
-              colors={['#F59E0B', '#D97706']}
-              style={styles.quickActionGradient}
-            >
-              <Ionicons name="people" size={28} color={Colors.white} />
-              <Text style={styles.quickActionText}>Kids</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.quickAction}
-            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
-          >
-            <LinearGradient
-              colors={['#2DD4BF', '#14B8A6']}
-              style={styles.quickActionGradient}
-            >
-              <Ionicons name="home" size={28} color={Colors.white} />
-              <Text style={styles.quickActionText}>Home</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.quickAction}
-            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
-          >
-            <LinearGradient
-              colors={['#EC4899', '#DB2777']}
-              style={styles.quickActionGradient}
-            >
-              <Ionicons name="sparkles" size={28} color={Colors.white} />
-              <Text style={styles.quickActionText}>Self Care</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          <View style={styles.budgetGrid}>
+            {budgetCategories.map((category) => (
+              <View key={category.id} style={styles.budgetCategoryCard}>
+                <BudgetCategoryRing
+                  label={category.name}
+                  allocated={category.allocated}
+                  spent={category.spent}
+                  currency={currency}
+                  size={100}
+                  tealColor={Colors.electricTeal}
+                  amberColor={Colors.sunKissedAmber}
+                />
+              </View>
+            ))}
+          </View>
         </View>
 
-        {/* Burn Rate & Daily Win */}
+        {/* Smart Shopper Tool */}
+        <TouchableOpacity
+          style={styles.smartShopperCard}
+          onPress={handleSmartShopperPress}
+          activeOpacity={0.9}
+        >
+          <LinearGradient
+            colors={[Colors.amethyst, Colors.electricTeal]}
+            style={styles.smartShopperGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.smartShopperContent}>
+              <View style={styles.smartShopperIcon}>
+                <Ionicons name="camera" size={40} color={Colors.white} />
+              </View>
+              <View style={styles.smartShopperText}>
+                <Text style={styles.smartShopperTitle}>Smart Shopper 🛍️</Text>
+                <Text style={styles.smartShopperSubtitle}>
+                  Scan products, find cheaper alternatives
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={28} color={Colors.white} />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Quick-Log */}
+        <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Quick-Log</Text>
+        <View style={styles.quickActions}>
+          {budgetCategories.slice(0, 4).map((cat, index) => (
+            <TouchableOpacity
+              key={cat.id}
+              style={styles.quickAction}
+              onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
+            >
+              <LinearGradient
+                colors={[cat.color, cat.color + 'DD']}
+                style={styles.quickActionGradient}
+              >
+                <Ionicons name={cat.icon as any} size={28} color={Colors.white} />
+                <Text style={styles.quickActionText}>{cat.name}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Burn Rate & Streak */}
         <View style={styles.statsRow}>
           <GlassCard style={styles.statCard}>
             <View style={styles.statHeader}>
-              <Text style={styles.statTitle}>Burn Rate 🔥</Text>
+              <Text style={[styles.statTitle, { color: Colors.primaryText }]}>Burn Rate 🔥</Text>
             </View>
             <View style={styles.burnRateCircle}>
-              <Text style={styles.burnRateValue}>{currency}{(financialData.dailyBudget - financialData.dailySpending).toFixed(0)}</Text>
-              <Text style={styles.burnRateLabel}>Remaining</Text>
+              <Text style={[styles.burnRateValue, { color: Colors.radiantMagenta }]}>
+                {currency}{(financialData.dailyBudget - financialData.dailySpending).toFixed(0)}
+              </Text>
+              <Text style={[styles.burnRateLabel, { color: Colors.tertiaryText }]}>Remaining</Text>
             </View>
           </GlassCard>
 
           <GlassCard style={styles.statCard}>
             <View style={styles.statHeader}>
-              <Text style={styles.statTitle}>Daily Win</Text>
+              <Text style={[styles.statTitle, { color: Colors.primaryText }]}>Streak</Text>
             </View>
-            <View style={styles.dailyWinContent}>
-              {financialData.dailySpending <= financialData.dailyBudget ? (
-                <>
-                  <Text style={styles.dailyWinEmoji}>🎉</Text>
-                  <Text style={styles.dailyWinText}>Stayed under{'\n'}budget!</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.dailyWinEmoji}>💪</Text>
-                  <Text style={styles.dailyWinText}>Tomorrow is{'\n'}a new day!</Text>
-                </>
-              )}
+            <View style={styles.streakContent}>
+              <LinearGradient
+                colors={['#F59E0B', '#EF4444']}
+                style={styles.streakIcon}
+              >
+                <Text style={styles.streakEmoji}>🔥</Text>
+              </LinearGradient>
+              <Text style={[styles.streakValue, { color: Colors.primaryText }]}>
+                {financialData.streakDays}
+              </Text>
+              <Text style={[styles.streakLabel, { color: Colors.tertiaryText }]}>Days</Text>
             </View>
           </GlassCard>
         </View>
       </ScrollView>
+
+      {/* Budget Allocation Modal */}
+      <Modal
+        visible={showBudgetModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowBudgetModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: Colors.white }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>Set Budget</Text>
+              <TouchableOpacity onPress={() => setShowBudgetModal(false)}>
+                <Ionicons name="close" size={28} color={Colors.primaryText} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView>
+              {budgetCategories.map((category, index) => (
+                <View key={category.id} style={styles.budgetInputRow}>
+                  <View style={styles.budgetInputLabel}>
+                    <Ionicons name={category.icon as any} size={20} color={category.color} />
+                    <Text style={[styles.budgetInputName, { color: Colors.primaryText }]}>
+                      {category.name}
+                    </Text>
+                  </View>
+                  <View style={[styles.budgetInputField, { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder }]}>
+                    <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
+                    <TextInput
+                      style={[styles.budgetInput, { color: Colors.primaryText }]}
+                      placeholder="0"
+                      placeholderTextColor={Colors.mediumGray}
+                      keyboardType="numeric"
+                      value={category.allocated.toString()}
+                      onChangeText={(value) => {
+                        const newCategories = [...budgetCategories];
+                        newCategories[index].allocated = parseFloat(value) || 0;
+                        setBudgetCategories(newCategories);
+                      }}
+                    />
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleSaveBudgetAllocations}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[Colors.electricTeal, Colors.glowingGreen]}
+                style={styles.saveButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.saveButtonText}>Save Budget</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -292,13 +393,11 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   loadingText: {
-    color: Colors.secondaryText,
     fontSize: 16,
     textAlign: 'center',
     fontWeight: '500',
   },
   errorText: {
-    color: Colors.primaryText,
     fontSize: 16,
     textAlign: 'center',
     marginTop: 16,
@@ -308,11 +407,10 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingHorizontal: 32,
     paddingVertical: 12,
-    backgroundColor: Colors.electricTeal,
     borderRadius: 12,
   },
   retryButtonText: {
-    color: Colors.white,
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -320,16 +418,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 24,
   },
   greeting: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.primaryText,
   },
   subtitle: {
     fontSize: 14,
-    color: Colors.electricTeal,
     marginTop: 4,
     fontWeight: '600',
   },
@@ -337,11 +433,9 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: Colors.white,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.glassBorder,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -355,88 +449,113 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.radiantMagenta,
   },
-  ringsCard: {
-    marginBottom: 30,
+  healthCard: {
+    marginBottom: 24,
   },
-  ringsContainer: {
-    alignItems: 'center',
-  },
-  ringWrapper: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  ring: {
-    position: 'relative',
-    marginBottom: 20,
-  },
-  ringCenter: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-  },
-  ringInner: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-  },
-  ringLabels: {
-    gap: 8,
-  },
-  ringLabel: {
+  healthHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  colorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  ringLabelText: {
-    fontSize: 14,
-    color: Colors.secondaryText,
-    fontWeight: '500',
-  },
-  wellnessScoreContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  wellnessLabel: {
-    fontSize: 14,
-    color: Colors.secondaryText,
-    marginBottom: 8,
+  healthLabel: {
+    fontSize: 18,
     fontWeight: '600',
   },
-  wellnessScore: {
+  healthScore: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 16,
   },
-  wellnessValue: {
-    fontSize: 36,
+  healthValue: {
+    fontSize: 32,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: '#FFFFFF',
   },
-  wellnessMax: {
-    fontSize: 20,
-    color: Colors.white,
+  healthMax: {
+    fontSize: 18,
+    color: '#FFFFFF',
     opacity: 0.7,
     marginLeft: 4,
+  },
+  budgetSection: {
+    marginBottom: 24,
+  },
+  budgetSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.primaryText,
-    marginBottom: 16,
+  },
+  budgetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  budgetCategoryCard: {
+    width: (width - 56) / 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 20,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  smartShopperCard: {
+    marginBottom: 24,
+    borderRadius: 24,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+  },
+  smartShopperGradient: {
+    padding: 20,
+  },
+  smartShopperContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  smartShopperIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  smartShopperText: {
+    flex: 1,
+  },
+  smartShopperTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  smartShopperSubtitle: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    opacity: 0.9,
   },
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 30,
+    marginBottom: 24,
   },
   quickAction: {
     width: (width - 60) / 4,
@@ -454,9 +573,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   quickActionText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    color: Colors.white,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   statsRow: {
@@ -473,7 +592,6 @@ const styles = StyleSheet.create({
   statTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.primaryText,
   },
   burnRateCircle: {
     alignItems: 'center',
@@ -482,27 +600,105 @@ const styles = StyleSheet.create({
   burnRateValue: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.radiantMagenta,
   },
   burnRateLabel: {
     fontSize: 12,
-    color: Colors.tertiaryText,
     marginTop: 4,
     fontWeight: '500',
   },
-  dailyWinContent: {
+  streakContent: {
     alignItems: 'center',
-    paddingVertical: 8,
   },
-  dailyWinEmoji: {
-    fontSize: 40,
+  streakIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  dailyWinText: {
+  streakEmoji: {
+    fontSize: 24,
+  },
+  streakValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  streakLabel: {
     fontSize: 12,
-    color: Colors.tertiaryText,
-    textAlign: 'center',
-    lineHeight: 16,
+    marginTop: 2,
     fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    paddingBottom: 40,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  budgetInputRow: {
+    marginBottom: 20,
+  },
+  budgetInputLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  budgetInputName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  budgetInputField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+  },
+  currencySymbol: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginRight: 8,
+  },
+  budgetInput: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: 'bold',
+    paddingVertical: 12,
+  },
+  saveButton: {
+    marginTop: 24,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#14B8A6',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  saveButtonGradient: {
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
 });

@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from '@fastshot/auth';
 import { supabase, cleanupSupabaseListeners } from '@/lib/supabase';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { Platform } from 'react-native';
 
 // Prevent splash screen from auto-hiding
@@ -41,23 +42,26 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
-      <AuthProvider
-        supabaseClient={supabase}
-        routes={{
-          login: '/(auth)/login',
-          afterLogin: '/(tabs)',
-        }}
-      >
-        <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="onboarding" />
-          <Stack.Screen name="setup" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="auth/callback" />
-        </Stack>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider
+          supabaseClient={supabase}
+          routes={{
+            login: '/(auth)/login',
+            afterLogin: '/(tabs)',
+          }}
+        >
+          <StatusBar style="auto" />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="setup" />
+            <Stack.Screen name="blueprint-setup" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="auth/callback" />
+          </Stack>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

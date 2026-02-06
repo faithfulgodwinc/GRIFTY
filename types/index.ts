@@ -21,10 +21,20 @@ export interface Expense {
   createdAt: string;
 }
 
-export type ExpenseCategory = 'groceries' | 'kids' | 'self-care' | 'home' | 'other';
+export type ExpenseCategory = 'household' | 'self-care' | 'education' | 'emergency' | 'groceries' | 'kids' | 'home' | 'other';
+
+export interface BudgetCategory {
+  id: string;
+  name: string;
+  allocated: number;
+  spent: number;
+  icon: string;
+  color: string;
+}
 
 export interface FinancialData {
   dailyWellnessScore: number;
+  budgetHealthScore?: number;
   monthlySavings: number;
   dailySpending: number;
   savingsGoal: number;
@@ -32,6 +42,7 @@ export interface FinancialData {
   streakDays: number;
   monthlyIncome: number;
   currency: string;
+  budgetCategories?: BudgetCategory[];
 }
 
 export interface Currency {

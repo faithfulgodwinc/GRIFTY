@@ -5,18 +5,19 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
+  TextInput,
+  Modal,
+  Alert,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Gradients } from '@/constants/Colors';
+import { getThemeColors, getGradients } from '@/constants/Colors';
 import { GlassCard } from '@/components/GlassCard';
 import { Ionicons } from '@expo/vector-icons';
 import { storage } from '@/utils/storage';
 import { useAuth } from '@fastshot/auth';
+import { useTheme } from '@/contexts/ThemeContext';
 import * as Haptics from 'expo-haptics';
-import Svg, { Path, Circle, Line } from 'react-native-svg';
-
-const { width } = Dimensions.get('window');
 
 interface Milestone {
   id: string;
@@ -39,7 +40,17 @@ const MILESTONES: Milestone[] = [
 export default function ProfileScreen() {
   const [userData, setUserData] = useState<any>(null);
   const [financialData, setFinancialData] = useState<any>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editIncome, setEditIncome] = useState('');
+  const [editSavingsGoal, setEditSavingsGoal] = useState('');
+  const [isRecalculating, setIsRecalculating] = useState(false);
   const { signOut, user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+
+  const Colors = getThemeColors(theme === 'dark');
+  const Gradients = getGradients(theme === 'dark');
+
+  const recalculateAnim = new Animated.Value(0);
 
   useEffect(() => {
     loadData();
@@ -50,34 +61,105 @@ export default function ProfileScreen() {
     const financial = await storage.getFinancialData();
     setUserData(user);
     setFinancialData(financial);
+    if (financial) {
+      setEditIncome(financial.monthlyIncome?.toString() || '');
+      setEditSavingsGoal(financial.savingsGoal?.toString() || '');
+    }
   };
 
-  const renderJourneyPath = () => {
-    const pathHeight = MILESTONES.length * 120;
-    const midX = width / 2;
+  const handleEditBlueprint = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setShowEditModal(true);
+  };
 
-    let path = `M ${midX} 0`;
+  const handleSaveBlueprint = async () => {
+    const income = parseFloat(editIncome);
+    const goal = parseFloat(editSavingsGoal);
 
-    MILESTONES.forEach((_, index) => {
-      const y = (index + 1) * 120;
-      const offsetX = index % 2 === 0 ? 40 : -40;
-      path += ` Q ${midX + offsetX} ${y - 40} ${midX} ${y}`;
-    });
+    if (!income || income <= 0) {
+      Alert.alert('Invalid Income', 'Please enter a valid monthly income.');
+      return;
+    }
 
-    return path;
+    if (!goal || goal <= 0) {
+      Alert.alert('Invalid Goal', 'Please enter a valid savings goal.');
+      return;
+    }
+
+    if (goal >= income) {
+      Alert.alert('Invalid Goal', 'Your savings goal should be less than your monthly income.');
+      return;
+    }
+
+    try {
+      setIsRecalculating(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Trigger recalculating animation
+      Animated.sequence([
+        Animated.timing(recalculateAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(recalculateAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      const dailyBudget = (income - goal) / 30;
+
+      const updatedUserData = {
+        ...userData,
+        monthlyIncome: income,
+        savingsGoal: goal,
+        dailyBudget,
+      };
+
+      const updatedFinancialData = {
+        ...financialData,
+        monthlyIncome: income,
+        savingsGoal: goal,
+        dailyBudget,
+      };
+
+      await storage.setUserData(updatedUserData);
+      await storage.setFinancialData(updatedFinancialData);
+
+      setUserData(updatedUserData);
+      setFinancialData(updatedFinancialData);
+
+      setTimeout(() => {
+        setIsRecalculating(false);
+        setShowEditModal(false);
+      }, 600);
+    } catch (error) {
+      console.error('Failed to update blueprint:', error);
+      setIsRecalculating(false);
+      Alert.alert('Update Failed', 'Unable to save your changes. Please try again.');
+    }
   };
 
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+        {/* Header with Theme Toggle */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Your Journey</Text>
-            <Text style={styles.subtitle}>Legacy Map</Text>
+            <Text style={[styles.title, { color: Colors.primaryText }]}>Your Journey</Text>
+            <Text style={[styles.subtitle, { color: Colors.electricTeal }]}>Legacy Map</Text>
           </View>
-          <TouchableOpacity style={styles.settingsButton}>
-            <Ionicons name="settings-outline" size={24} color={Colors.primaryText} />
+          <TouchableOpacity
+            style={[styles.themeToggle, { backgroundColor: Colors.cardBackground, borderColor: Colors.glassBorder }]}
+            onPress={toggleTheme}
+          >
+            <Ionicons
+              name={theme === 'dark' ? 'moon' : 'sunny'}
+              size={24}
+              color={theme === 'dark' ? Colors.amethyst : Colors.sunKissedAmber}
+            />
           </TouchableOpacity>
         </View>
 
@@ -95,7 +177,7 @@ export default function ProfileScreen() {
                   </Text>
                 </LinearGradient>
               ) : (
-                <View style={styles.emojiAvatarContainer}>
+                <View style={[styles.emojiAvatarContainer, { backgroundColor: Colors.lightCream }]}>
                   <Text style={styles.emojiAvatar}>
                     {userData?.avatarUrl || '👩'}
                   </Text>
@@ -103,164 +185,124 @@ export default function ProfileScreen() {
               )}
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.userName}>{userData?.name || 'Super Mom'}</Text>
-              <Text style={styles.userEmail}>{user?.email || 'mom@grit.app'}</Text>
+              <Text style={[styles.userName, { color: Colors.primaryText }]}>{userData?.name || 'Super Mom'}</Text>
+              <Text style={[styles.userEmail, { color: Colors.secondaryText }]}>{user?.email || 'mom@grit.app'}</Text>
             </View>
           </View>
 
-          <View style={styles.statsContainer}>
+          <View style={[styles.statsContainer, { borderTopColor: Colors.glassBorder }]}>
             <View style={styles.stat}>
-              <Text style={styles.statValue}>
+              <Text style={[styles.statValue, { color: Colors.electricTeal }]}>
                 {financialData?.streakDays || 0}
               </Text>
-              <Text style={styles.statLabel}>Day Streak</Text>
+              <Text style={[styles.statLabel, { color: Colors.tertiaryText }]}>Day Streak</Text>
             </View>
-            <View style={styles.statDivider} />
+            <View style={[styles.statDivider, { backgroundColor: Colors.glassBorder }]} />
             <View style={styles.stat}>
-              <Text style={styles.statValue}>
+              <Text style={[styles.statValue, { color: Colors.electricTeal }]}>
                 {financialData?.currency || '£'}{financialData?.monthlySavings || 0}
               </Text>
-              <Text style={styles.statLabel}>Saved</Text>
+              <Text style={[styles.statLabel, { color: Colors.tertiaryText }]}>Saved</Text>
             </View>
-            <View style={styles.statDivider} />
+            <View style={[styles.statDivider, { backgroundColor: Colors.glassBorder }]} />
             <View style={styles.stat}>
-              <Text style={styles.statValue}>
+              <Text style={[styles.statValue, { color: Colors.electricTeal }]}>
                 {MILESTONES.filter((m) => m.unlocked).length}
               </Text>
-              <Text style={styles.statLabel}>Milestones</Text>
+              <Text style={[styles.statLabel, { color: Colors.tertiaryText }]}>Milestones</Text>
             </View>
           </View>
         </GlassCard>
 
-        {/* Streak Fire */}
-        <GlassCard style={styles.streakCard}>
-          <View style={styles.streakContent}>
-            <LinearGradient
-              colors={['#F59E0B', '#EF4444']}
-              style={styles.fireContainer}
+        {/* Financial Blueprint Card */}
+        <GlassCard style={styles.blueprintCard}>
+          <View style={styles.blueprintHeader}>
+            <View>
+              <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Financial Blueprint</Text>
+              <Text style={[styles.blueprintSubtitle, { color: Colors.secondaryText }]}>
+                Your monthly plan
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.editButton, { backgroundColor: Colors.electricTeal }]}
+              onPress={handleEditBlueprint}
             >
-              <Text style={styles.fireEmoji}>🔥</Text>
-            </LinearGradient>
-            <View style={styles.streakInfo}>
-              <Text style={styles.streakTitle}>Streak Fire</Text>
-              <Text style={styles.streakDescription}>
-                {financialData?.streakDays || 0} days of staying on budget!
+              <Ionicons name="create-outline" size={20} color={Colors.white} />
+            </TouchableOpacity>
+          </View>
+
+          {isRecalculating && (
+            <Animated.View style={[styles.recalculatingBanner, {
+              opacity: recalculateAnim,
+              transform: [{ scale: recalculateAnim }],
+            }]}>
+              <LinearGradient
+                colors={[Colors.amethyst, Colors.electricTeal]}
+                style={styles.recalculatingGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Ionicons name="sync" size={16} color={Colors.white} />
+                <Text style={styles.recalculatingText}>Recalculating...</Text>
+              </LinearGradient>
+            </Animated.View>
+          )}
+
+          <View style={styles.blueprintDetails}>
+            <View style={[styles.blueprintRow, { borderBottomColor: Colors.glassBorder }]}>
+              <Text style={[styles.blueprintLabel, { color: Colors.secondaryText }]}>Monthly Earnings</Text>
+              <Text style={[styles.blueprintValue, { color: Colors.primaryText }]}>
+                {financialData?.currency || '£'}{financialData?.monthlyIncome?.toFixed(0) || '0'}
+              </Text>
+            </View>
+            <View style={[styles.blueprintRow, { borderBottomColor: Colors.glassBorder }]}>
+              <Text style={[styles.blueprintLabel, { color: Colors.secondaryText }]}>Savings Goal</Text>
+              <Text style={[styles.blueprintValue, { color: Colors.primaryText }]}>
+                {financialData?.currency || '£'}{financialData?.savingsGoal?.toFixed(0) || '0'}
+              </Text>
+            </View>
+            <View style={styles.blueprintRow}>
+              <Text style={[styles.blueprintLabelHighlight, { color: Colors.primaryText }]}>Daily Budget</Text>
+              <Text style={[styles.blueprintValueHighlight, { color: Colors.electricTeal }]}>
+                {financialData?.currency || '£'}{financialData?.dailyBudget?.toFixed(2) || '0.00'}
               </Text>
             </View>
           </View>
-          <View style={styles.streakProgress}>
-            <View style={styles.streakBar}>
-              <LinearGradient
-                colors={['#F59E0B', '#EF4444']}
-                style={[
-                  styles.streakBarFill,
-                  { width: `${Math.min(((financialData?.streakDays || 0) / 30) * 100, 100)}%` },
-                ]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              />
-            </View>
-            <Text style={styles.streakTarget}>30 days goal</Text>
-          </View>
         </GlassCard>
-
-        {/* Legacy Map */}
-        <View style={styles.journeySection}>
-          <Text style={styles.sectionTitle}>Your Legacy Map</Text>
-          <Text style={styles.sectionSubtitle}>
-            Unlock milestones as you progress
-          </Text>
-
-          <View style={styles.journeyMap}>
-            {MILESTONES.map((milestone, index) => (
-              <View
-                key={milestone.id}
-                style={[
-                  styles.milestoneContainer,
-                  index % 2 === 0 ? styles.milestoneLeft : styles.milestoneRight,
-                ]}
-              >
-                <View style={styles.milestoneNode}>
-                  <View
-                    style={[
-                      styles.milestoneCircle,
-                      milestone.unlocked && styles.milestoneUnlocked,
-                    ]}
-                  >
-                    {milestone.unlocked ? (
-                      <LinearGradient
-                        colors={[Colors.electricTeal, Colors.vibrantPurple]}
-                        style={styles.milestoneGradient}
-                      >
-                        <Text style={styles.milestoneIcon}>{milestone.icon}</Text>
-                      </LinearGradient>
-                    ) : (
-                      <View style={styles.milestoneLocked}>
-                        <Ionicons name="lock-closed" size={20} color={Colors.mediumGray} />
-                      </View>
-                    )}
-                  </View>
-                  {index < MILESTONES.length - 1 && (
-                    <View style={styles.milestoneLine} />
-                  )}
-                </View>
-
-                <TouchableOpacity
-                  style={styles.milestoneCard}
-                  onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-                  activeOpacity={0.8}
-                >
-                  <GlassCard>
-                    <Text style={styles.milestoneTitle}>{milestone.title}</Text>
-                    <Text style={styles.milestoneDescription}>
-                      {milestone.description}
-                    </Text>
-                    {milestone.unlocked && (
-                      <View style={styles.unlockedBadge}>
-                        <Ionicons name="checkmark-circle" size={16} color={Colors.glowingGreen} />
-                        <Text style={styles.unlockedText}>Unlocked!</Text>
-                      </View>
-                    )}
-                  </GlassCard>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        </View>
 
         {/* Settings Options */}
         <View style={styles.settingsSection}>
-          <Text style={styles.sectionTitle}>Settings</Text>
+          <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Settings</Text>
           <GlassCard>
             <TouchableOpacity style={styles.settingItem}>
               <View style={styles.settingLeft}>
                 <Ionicons name="person-outline" size={24} color={Colors.electricTeal} />
-                <Text style={styles.settingText}>Edit Profile</Text>
+                <Text style={[styles.settingText, { color: Colors.primaryText }]}>Edit Profile</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={Colors.mediumGray} />
             </TouchableOpacity>
 
-            <View style={styles.settingDivider} />
+            <View style={[styles.settingDivider, { backgroundColor: Colors.glassBorder }]} />
 
             <TouchableOpacity style={styles.settingItem}>
               <View style={styles.settingLeft}>
                 <Ionicons name="notifications-outline" size={24} color={Colors.sunKissedAmber} />
-                <Text style={styles.settingText}>Notifications</Text>
+                <Text style={[styles.settingText, { color: Colors.primaryText }]}>Notifications</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={Colors.mediumGray} />
             </TouchableOpacity>
 
-            <View style={styles.settingDivider} />
+            <View style={[styles.settingDivider, { backgroundColor: Colors.glassBorder }]} />
 
             <TouchableOpacity style={styles.settingItem}>
               <View style={styles.settingLeft}>
                 <Ionicons name="help-circle-outline" size={24} color={Colors.vibrantPurple} />
-                <Text style={styles.settingText}>Help & Support</Text>
+                <Text style={[styles.settingText, { color: Colors.primaryText }]}>Help & Support</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={Colors.mediumGray} />
             </TouchableOpacity>
 
-            <View style={styles.settingDivider} />
+            <View style={[styles.settingDivider, { backgroundColor: Colors.glassBorder }]} />
 
             <TouchableOpacity
               style={styles.settingItem}
@@ -279,6 +321,70 @@ export default function ProfileScreen() {
           </GlassCard>
         </View>
       </ScrollView>
+
+      {/* Edit Blueprint Modal */}
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: Colors.white }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>Edit Blueprint</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <Ionicons name="close" size={28} color={Colors.primaryText} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Monthly Earnings</Text>
+            <View style={[styles.amountInput, { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder }]}>
+              <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>
+                {financialData?.currency || '£'}
+              </Text>
+              <TextInput
+                style={[styles.input, { color: Colors.primaryText }]}
+                placeholder="3000"
+                placeholderTextColor={Colors.mediumGray}
+                keyboardType="numeric"
+                value={editIncome}
+                onChangeText={setEditIncome}
+              />
+            </View>
+
+            <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Savings Goal</Text>
+            <View style={[styles.amountInput, { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder }]}>
+              <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>
+                {financialData?.currency || '£'}
+              </Text>
+              <TextInput
+                style={[styles.input, { color: Colors.primaryText }]}
+                placeholder="500"
+                placeholderTextColor={Colors.mediumGray}
+                keyboardType="numeric"
+                value={editSavingsGoal}
+                onChangeText={setEditSavingsGoal}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleSaveBlueprint}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[Colors.electricTeal, Colors.glowingGreen]}
+                style={styles.saveButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -301,28 +407,24 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.primaryText,
   },
   subtitle: {
     fontSize: 14,
-    color: Colors.electricTeal,
     marginTop: 4,
     fontWeight: '600',
   },
-  settingsButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.white,
+  themeToggle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
+    borderWidth: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
   },
   profileCard: {
     marginBottom: 20,
@@ -348,14 +450,13 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: '#FFFFFF',
   },
   emojiAvatarContainer: {
     width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.lightCream,
     borderRadius: 40,
   },
   emojiAvatar: {
@@ -367,12 +468,10 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: Colors.primaryText,
     marginBottom: 4,
   },
   userEmail: {
     fontSize: 14,
-    color: Colors.secondaryText,
     fontWeight: '500',
   },
   statsContainer: {
@@ -380,7 +479,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: Colors.glassBorder,
   },
   stat: {
     alignItems: 'center',
@@ -388,160 +486,80 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.electricTeal,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: Colors.tertiaryText,
     fontWeight: '500',
   },
   statDivider: {
     width: 1,
-    backgroundColor: Colors.glassBorder,
   },
-  streakCard: {
-    marginBottom: 30,
+  blueprintCard: {
+    marginBottom: 20,
   },
-  streakContent: {
+  blueprintHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 16,
-  },
-  fireContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fireEmoji: {
-    fontSize: 32,
-  },
-  streakInfo: {
-    flex: 1,
-  },
-  streakTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.primaryText,
-    marginBottom: 4,
-  },
-  streakDescription: {
-    fontSize: 14,
-    color: Colors.secondaryText,
-    fontWeight: '500',
-  },
-  streakProgress: {
-    marginTop: 8,
-  },
-  streakBar: {
-    height: 8,
-    backgroundColor: Colors.darkGray,
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  streakBarFill: {
-    height: '100%',
-  },
-  streakTarget: {
-    fontSize: 12,
-    color: Colors.tertiaryText,
-    textAlign: 'right',
-    fontWeight: '500',
-  },
-  journeySection: {
-    marginBottom: 30,
+    marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.primaryText,
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  sectionSubtitle: {
+  blueprintSubtitle: {
     fontSize: 14,
-    color: Colors.secondaryText,
-    marginBottom: 24,
     fontWeight: '500',
   },
-  journeyMap: {
-    paddingVertical: 20,
-  },
-  milestoneContainer: {
-    flexDirection: 'row',
-    marginBottom: 40,
-    gap: 16,
-  },
-  milestoneLeft: {
-    justifyContent: 'flex-start',
-  },
-  milestoneRight: {
-    flexDirection: 'row-reverse',
-  },
-  milestoneNode: {
-    alignItems: 'center',
-  },
-  milestoneCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: Colors.lightGray,
-  },
-  milestoneUnlocked: {
-    borderColor: Colors.electricTeal,
-  },
-  milestoneGradient: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  milestoneLocked: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: Colors.lightCream,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  milestoneIcon: {
-    fontSize: 28,
-  },
-  milestoneLine: {
-    width: 3,
+  editButton: {
+    width: 40,
     height: 40,
-    backgroundColor: Colors.lightGray,
-    marginTop: 8,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  milestoneCard: {
-    flex: 1,
+  recalculatingBanner: {
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
-  milestoneTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.primaryText,
-    marginBottom: 6,
-  },
-  milestoneDescription: {
-    fontSize: 14,
-    color: Colors.secondaryText,
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  unlockedBadge: {
+  recalculatingGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 8,
   },
-  unlockedText: {
-    fontSize: 12,
+  recalculatingText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '600',
-    color: Colors.glowingGreen,
+  },
+  blueprintDetails: {},
+  blueprintRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  blueprintLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  blueprintValue: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  blueprintLabelHighlight: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  blueprintValueHighlight: {
+    fontSize: 24,
+    fontWeight: 'bold',
   },
   settingsSection: {
     marginBottom: 20,
@@ -559,11 +577,73 @@ const styles = StyleSheet.create({
   },
   settingText: {
     fontSize: 16,
-    color: Colors.primaryText,
     fontWeight: '500',
   },
   settingDivider: {
     height: 1,
-    backgroundColor: Colors.glassBorder,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+    marginTop: 16,
+  },
+  amountInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+  },
+  currencySymbol: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    fontSize: 28,
+    fontWeight: 'bold',
+    paddingVertical: 16,
+  },
+  saveButton: {
+    marginTop: 24,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#14B8A6',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  saveButtonGradient: {
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
 });

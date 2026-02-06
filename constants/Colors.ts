@@ -1,16 +1,17 @@
-// Grit App - Vibrant Velocity Design System
+// Grit App - Dual-Glow Mom-Boss Design System
 
-// Dark Theme Colors
+// Dark Theme Colors - Deep Obsidian with Electric Teal & Amethyst Accents
 const DarkColors = {
-  // Electric Midnight Base
-  background: '#1E1B4B',
-  darkPurple: '#0F0A2E',
-  cardBackground: 'rgba(30, 27, 75, 0.6)',
+  // Deep Obsidian Base
+  background: '#0A0612',
+  darkPurple: '#140A24',
+  cardBackground: 'rgba(20, 10, 36, 0.85)',
 
-  // Primary Colors
+  // Primary Colors - Electric Teal & Amethyst
   radiantMagenta: '#E11D48',
   sunKissedAmber: '#F59E0B',
   electricTeal: '#2DD4BF',
+  amethyst: '#A855F7',
 
   // Accent Colors
   neonPink: '#EC4899',
@@ -22,6 +23,7 @@ const DarkColors = {
   lightGray: '#E5E7EB',
   mediumGray: '#9CA3AF',
   darkGray: '#4B5563',
+  lightCream: '#2D1B3D',
 
   // Status Colors
   success: '#10B981',
@@ -29,8 +31,8 @@ const DarkColors = {
   error: '#EF4444',
 
   // Glassmorphism
-  glassBorder: 'rgba(255, 255, 255, 0.1)',
-  glassHighlight: 'rgba(255, 255, 255, 0.05)',
+  glassBorder: 'rgba(45, 212, 191, 0.2)',
+  glassHighlight: 'rgba(168, 85, 247, 0.1)',
 
   // Text Colors
   primaryText: '#FFFFFF',
@@ -38,24 +40,25 @@ const DarkColors = {
   tertiaryText: '#9CA3AF',
 };
 
-// Light Theme Colors - Sophisticated Light Canvas
+// Light Theme Colors - Warm Cream & Soft Slate with Glassmorphism
 const LightColors = {
-  // Sophisticated Light Base
-  background: '#FAF9F7',
-  lightCream: '#F5F3F0',
-  cardBackground: 'rgba(255, 255, 255, 0.85)',
+  // Warm Cream Base
+  background: '#FAF8F5',
+  lightCream: '#F5F2EE',
+  cardBackground: 'rgba(255, 255, 255, 0.7)',
 
-  // Primary Colors (same vibrant accents)
+  // Primary Colors
   radiantMagenta: '#E11D48',
   sunKissedAmber: '#F59E0B',
   electricTeal: '#14B8A6',
+  amethyst: '#A855F7',
 
   // Accent Colors
   neonPink: '#EC4899',
   vibrantPurple: '#A855F7',
   glowingGreen: '#10B981',
 
-  // Neutral Colors
+  // Neutral Colors - Soft Slate
   white: '#FFFFFF',
   lightGray: '#6B7280',
   mediumGray: '#4B5563',
@@ -68,7 +71,7 @@ const LightColors = {
 
   // Glassmorphism for Light Mode
   glassBorder: 'rgba(0, 0, 0, 0.08)',
-  glassHighlight: 'rgba(0, 0, 0, 0.02)',
+  glassHighlight: 'rgba(255, 255, 255, 0.6)',
 
   // Text Colors
   primaryText: '#1F2937',
@@ -76,15 +79,29 @@ const LightColors = {
   tertiaryText: '#6B7280',
 };
 
-// Use Light Theme by default (can be toggled via context/state later)
+// Theme getter function
+export const getThemeColors = (isDark: boolean) => isDark ? DarkColors : LightColors;
+
+// Export default light theme
 export const Colors = LightColors;
 export const DarkTheme = DarkColors;
 
-export const Gradients = {
+// Dynamic gradients
+export const getGradients = (isDark: boolean) => ({
   primary: ['#E11D48', '#F59E0B'] as const,
   secondary: ['#14B8A6', '#10B981'] as const,
-  hero: ['#7C3AED', '#EC4899', '#F59E0B'] as const,
+  hero: isDark
+    ? ['#2DD4BF', '#A855F7', '#EC4899'] as const
+    : ['#7C3AED', '#EC4899', '#F59E0B'] as const,
   wellness: ['#14B8A6', '#E11D48'] as const,
-  card: ['rgba(255, 255, 255, 0.9)', 'rgba(250, 249, 247, 0.9)'] as const,
-  background: ['#FAF9F7', '#F5F3F0'] as const,
-};
+  card: isDark
+    ? ['rgba(20, 10, 36, 0.85)', 'rgba(20, 10, 36, 0.9)'] as const
+    : ['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0.9)'] as const,
+  background: isDark
+    ? ['#0A0612', '#140A24'] as const
+    : ['#FAF8F5', '#F5F2EE'] as const,
+  amethystGlow: ['#A855F7', '#2DD4BF'] as const,
+});
+
+// Static gradients for compatibility
+export const Gradients = getGradients(false);
