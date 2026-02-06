@@ -3,12 +3,13 @@ export interface User {
   email: string;
   name?: string;
   avatarUrl?: string;
-  currency?: string; // Symbol like $, £, €, etc.
+  currency?: string;
   monthlyIncome?: number;
   savingsGoal?: number;
   dailyBudget?: number;
   onboardingComplete: boolean;
   blueprintComplete: boolean;
+  totalSavings?: number;
 }
 
 export interface Expense {
@@ -21,7 +22,17 @@ export interface Expense {
   createdAt: string;
 }
 
-export type ExpenseCategory = 'household' | 'self-care' | 'education' | 'emergency' | 'groceries' | 'kids' | 'home' | 'other';
+export type ExpenseCategory =
+  | 'groceries'
+  | 'kids'
+  | 'self-care'
+  | 'home'
+  | 'transport'
+  | 'dining'
+  | 'entertainment'
+  | 'health'
+  | 'education'
+  | 'other';
 
 export interface BudgetCategory {
   id: string;
@@ -42,6 +53,7 @@ export interface FinancialData {
   streakDays: number;
   monthlyIncome: number;
   currency: string;
+  totalSavings?: number;
   budgetCategories?: BudgetCategory[];
 }
 
@@ -79,6 +91,17 @@ export interface Milestone {
   icon: string;
   unlocked: boolean;
   unlockedAt?: string;
+  amount?: number;
+}
+
+export interface SavingsWin {
+  id: string;
+  userId: string;
+  title: string;
+  amount: number;
+  description?: string;
+  winDate: string;
+  createdAt: string;
 }
 
 export interface FinancialHack {
@@ -94,4 +117,32 @@ export interface InvestmentData {
   duration: number; // years
   riskLevel: 'safe' | 'steady' | 'aggressive';
   projectedReturn: number;
+}
+
+// Context types for centralized state
+export interface FinancialContextState {
+  // User profile
+  profile: User | null;
+  // Financial data
+  financialData: FinancialData | null;
+  // Daily rollover engine
+  rolloverState: DailyRolloverState | null;
+  // Expenses
+  todayExpenses: Expense[];
+  monthExpenses: Expense[];
+  // Savings
+  savingsWins: SavingsWin[];
+  totalSavings: number;
+  // Milestones
+  milestones: Milestone[];
+  // Loading states
+  isLoading: boolean;
+  isRefreshing: boolean;
+  // Computed values
+  spendableToday: number;
+  dailyAllowance: number;
+  momentumStreak: number;
+  daysRemainingInMonth: number;
+  monthlySpentSoFar: number;
+  wellnessScore: number;
 }

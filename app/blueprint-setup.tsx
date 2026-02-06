@@ -117,7 +117,11 @@ export default function BlueprintSetupScreen() {
 
       const income = parseFloat(monthlyIncome);
       const goal = parseFloat(savingsGoal);
-      const dailyBudget = (income - goal) / 30;
+      // Calculate daily budget based on actual remaining days in month
+      const now = new Date();
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const daysRemaining = lastDay - now.getDate() + 1;
+      const dailyBudget = (income - goal) / daysRemaining;
 
       const userData = {
         name: name.trim(),
@@ -138,6 +142,7 @@ export default function BlueprintSetupScreen() {
         streakDays: 0,
         monthlyIncome: income,
         currency: selectedCurrency.symbol,
+        totalSavings: 0,
       };
 
       // Save locally first

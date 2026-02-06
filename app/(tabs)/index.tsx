@@ -1,236 +1,406 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Dimensions,
   Modal,
   TextInput,
   Alert,
+  Animated,
+  RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getThemeColors, getGradients } from '@/constants/Colors';
-import { Typography, Spacing, BorderRadius } from '@/constants/Theme';
+import { Typography, Spacing, BorderRadius, Shadows, Animation } from '@/constants/Theme';
 import { GlassCard } from '@/components/GlassCard';
 import { PressableScale } from '@/components/PressableScale';
 import { EmptyState } from '@/components/EmptyState';
 import { DashboardSkeleton } from '@/components/SkeletonLoader';
-import { BudgetCategoryRing } from '@/components/BudgetCategoryRing';
-import { storage } from '@/utils/storage';
-import { BudgetCategory, FinancialData, DailyRolloverState } from '@/types';
-import { initializeDailyRollover, updateDailySpending } from '@/utils/dailyRollover';
+import { ExpenseCategory, Expense } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
-import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
+import { useFinancialData } from '@/contexts/FinancialDataContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 
-const { width } = Dimensions.get('window');
-
-const AVAILABLE_ICONS = [
-  { icon: 'home', label: 'Home' },
-  { icon: 'cart', label: 'Shopping' },
-  { icon: 'restaurant', label: 'Food' },
-  { icon: 'car', label: 'Transport' },
-  { icon: 'medkit', label: 'Health' },
-  { icon: 'school', label: 'Education' },
-  { icon: 'shirt', label: 'Clothing' },
-  { icon: 'gift', label: 'Gifts' },
-  { icon: 'football', label: 'Recreation' },
-  { icon: 'sparkles', label: 'Self-Care' },
-  { icon: 'alert-circle', label: 'Emergency' },
-  { icon: 'leaf', label: 'Utilities' },
+// ─── Quick-Log Category Definitions ──────────────────────────────────────────
+const QUICK_CATEGORIES: {
+  key: ExpenseCategory;
+  label: string;
+  emoji: string;
+  color: string;
+  darkColor: string;
+}[] = [
+  { key: 'groceries', label: 'Groceries', emoji: '\uD83D\uDED2', color: '#10B981', darkColor: '#10B981' },
+  { key: 'kids', label: 'Kids', emoji: '\uD83D\uDC76', color: '#A855F7', darkColor: '#A855F7' },
+  { key: 'home', label: 'Home', emoji: '\uD83C\uDFE0', color: '#F59E0B', darkColor: '#F59E0B' },
+  { key: 'self-care', label: 'Self-Care', emoji: '\uD83D\uDC86\u200D\u2640\uFE0F', color: '#EC4899', darkColor: '#EC4899' },
 ];
 
-const AVAILABLE_COLORS = [
-  '#E11D48', '#EC4899', '#F59E0B', '#14B8A6',
-  '#10B981', '#6366F1', '#8B5CF6', '#EF4444',
+// ─── All Categories for Modal ────────────────────────────────────────────────
+const ALL_CATEGORIES: {
+  key: ExpenseCategory;
+  label: string;
+  emoji: string;
+  color: string;
+}[] = [
+  { key: 'groceries', label: 'Groceries', emoji: '\uD83D\uDED2', color: '#10B981' },
+  { key: 'kids', label: 'Kids', emoji: '\uD83D\uDC76', color: '#A855F7' },
+  { key: 'home', label: 'Home', emoji: '\uD83C\uDFE0', color: '#F59E0B' },
+  { key: 'self-care', label: 'Self-Care', emoji: '\uD83D\uDC86\u200D\u2640\uFE0F', color: '#EC4899' },
+  { key: 'transport', label: 'Transport', emoji: '\uD83D\uDE97', color: '#3B82F6' },
+  { key: 'dining', label: 'Dining', emoji: '\uD83C\uDF7D\uFE0F', color: '#EF4444' },
+  { key: 'entertainment', label: 'Fun', emoji: '\uD83C\uDFAC', color: '#8B5CF6' },
+  { key: 'health', label: 'Health', emoji: '\uD83D\uDC8A', color: '#14B8A6' },
+  { key: 'education', label: 'Education', emoji: '\uD83D\uDCDA', color: '#6366F1' },
+  { key: 'other', label: 'Other', emoji: '\uD83D\uDCCC', color: '#6B7280' },
 ];
 
+// ─── Currency Formatter ──────────────────────────────────────────────────────
 const formatCurrency = (currency: string, value: number): string => {
-  return `${currency}${value.toFixed(2)}`;
+  return `${currency}${Math.abs(value).toFixed(2)}`;
 };
 
-export default function HomeScreen() {
-  const [financialData, setFinancialData] = useState<FinancialData | null>(null);
-  const [userData, setUserData] = useState<any>(null);
-  const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showBudgetModal, setShowBudgetModal] = useState(false);
-  const [showAddItemModal, setShowAddItemModal] = useState(false);
-  const [showLogSpendingModal, setShowLogSpendingModal] = useState(false);
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemIcon, setNewItemIcon] = useState('home');
-  const [newItemColor, setNewItemColor] = useState('#E11D48');
-  const [newItemAllocation, setNewItemAllocation] = useState('');
-  const [spendingAmount, setSpendingAmount] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [rolloverState, setRolloverState] = useState<DailyRolloverState | null>(null);
-  const { theme } = useTheme();
+// ─── Time-based greeting ─────────────────────────────────────────────────────
+const getGreeting = (): string => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good Morning';
+  if (hour < 18) return 'Good Afternoon';
+  return 'Good Evening';
+};
 
+// ─── Wellness Score Ring ─────────────────────────────────────────────────────
+function WellnessRing({
+  score,
+  size = 100,
+  strokeWidth = 8,
+}: {
+  score: number;
+  size?: number;
+  strokeWidth?: number;
+}) {
+  const animatedValue = useRef(new Animated.Value(0)).current;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const clampedScore = Math.max(0, Math.min(score, 100));
+
+  useEffect(() => {
+    Animated.timing(animatedValue, {
+      toValue: clampedScore,
+      duration: 1200,
+      useNativeDriver: false,
+    }).start();
+  }, [clampedScore, animatedValue]);
+
+  const strokeDashoffset = circumference - (circumference * clampedScore) / 100;
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Defs>
+          <SvgGradient id="wellnessGrad" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0%" stopColor="#2DD4BF" />
+            <Stop offset="50%" stopColor="#A855F7" />
+            <Stop offset="100%" stopColor="#EC4899" />
+          </SvgGradient>
+        </Defs>
+        {/* Background track */}
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="rgba(255,255,255,0.08)"
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        {/* Progress arc */}
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="url(#wellnessGrad)"
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={`${circumference}`}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          rotation="-90"
+          origin={`${size / 2}, ${size / 2}`}
+        />
+      </Svg>
+      <View style={StyleSheet.absoluteFill as any}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={styles.wellnessScoreValue}>{clampedScore}</Text>
+          <Text style={styles.wellnessScoreLabel}>Score</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ─── Animated Progress Bar ───────────────────────────────────────────────────
+function AnimatedProgressBar({
+  percentage,
+  isUnderBudget,
+  colors,
+  gradients,
+  isDark,
+}: {
+  percentage: number;
+  isUnderBudget: boolean;
+  colors: ReturnType<typeof getThemeColors>;
+  gradients: ReturnType<typeof getGradients>;
+  isDark: boolean;
+}) {
+  const widthAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    Animated.timing(widthAnim, {
+      toValue: Math.min(percentage, 100),
+      duration: 800,
+      useNativeDriver: false,
+    }).start();
+  }, [percentage, widthAnim]);
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 0.8, duration: 1500, useNativeDriver: false }),
+        Animated.timing(glowAnim, { toValue: 0.4, duration: 1500, useNativeDriver: false }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [glowAnim]);
+
+  const animatedWidth = widthAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+  });
+
+  return (
+    <View style={[
+      styles.progressBarContainer,
+      { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : colors.lightCream },
+    ]}>
+      <Animated.View
+        style={[
+          styles.progressBarGlow,
+          {
+            width: animatedWidth as any,
+            shadowColor: isUnderBudget ? colors.electricTeal : colors.radiantMagenta,
+            shadowOpacity: glowAnim,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={
+            !isUnderBudget
+              ? [colors.radiantMagenta, colors.sunKissedAmber]
+              : gradients.neonBar
+          }
+          style={styles.progressBarFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
+// =============================================================================
+// HOME SCREEN COMPONENT
+// =============================================================================
+export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
   const Gradients = getGradients(isDark);
 
+  const {
+    profile,
+    financialData,
+    rolloverState,
+    todayExpenses,
+    isLoading,
+    isRefreshing,
+    spendableToday,
+    dailyAllowance,
+    momentumStreak,
+    wellnessScore,
+    actions,
+  } = useFinancialData();
+
+  // ─── Local State ───────────────────────────────────────────────────────────
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [spendingAmount, setSpendingAmount] = useState('');
+  const [spendingDescription, setSpendingDescription] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<ExpenseCategory>('other');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ─── Animation Refs ────────────────────────────────────────────────────────
+  const heroScaleAnim = useRef(new Animated.Value(0.95)).current;
+  const heroOpacityAnim = useRef(new Animated.Value(0)).current;
+  const dailyWinAnim = useRef(new Animated.Value(0)).current;
+
+  // ─── Entrance Animations ──────────────────────────────────────────────────
   useEffect(() => {
-    loadData();
+    if (!isLoading) {
+      Animated.parallel([
+        Animated.spring(heroScaleAnim, {
+          toValue: 1,
+          tension: 60,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heroOpacityAnim, {
+          toValue: 1,
+          duration: Animation.entrance,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Daily win bounce (always animate, visibility controlled by render)
+      Animated.sequence([
+        Animated.delay(600),
+        Animated.spring(dailyWinAnim, {
+          toValue: 1,
+          tension: 80,
+          friction: 6,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [isLoading, heroScaleAnim, heroOpacityAnim, dailyWinAnim]);
+
+  // ─── Derived Values ────────────────────────────────────────────────────────
+  const currency = profile?.currency || financialData?.currency || '\u00A3';
+  const todayEffectiveLimit = rolloverState?.todayEntry?.effectiveLimit ?? dailyAllowance;
+  const todayTotalSpent = todayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+  const todayRemaining = todayEffectiveLimit - todayTotalSpent;
+  const tomorrowForecast = rolloverState?.tomorrowForecast ?? dailyAllowance;
+  const isUnderBudget = todayTotalSpent <= todayEffectiveLimit;
+  const spendingPercentage = todayEffectiveLimit > 0
+    ? Math.min((todayTotalSpent / todayEffectiveLimit) * 100, 100)
+    : 0;
+  const burnRate = todayEffectiveLimit > 0
+    ? Math.round((todayTotalSpent / todayEffectiveLimit) * 100)
+    : 0;
+
+  // ─── Handlers ──────────────────────────────────────────────────────────────
+  const handleOpenLogModal = useCallback((category?: ExpenseCategory) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSelectedCategory(category || 'other');
+    setSpendingAmount('');
+    setSpendingDescription('');
+    setShowLogModal(true);
   }, []);
 
-  const loadData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const financial = await storage.getFinancialData();
-      const user = await storage.getUserData();
-
-      if (!financial || !user) {
-        setError('Please complete your financial blueprint setup.');
-        return;
-      }
-
-      setFinancialData(financial);
-      setUserData(user);
-
-      if (financial.budgetCategories && financial.budgetCategories.length > 0) {
-        setBudgetCategories(financial.budgetCategories);
-      } else {
-        setBudgetCategories([]);
-      }
-
-      const rollover = await initializeDailyRollover(financial);
-      setRolloverState(rollover);
-    } catch (loadError) {
-      console.error('Failed to load data:', loadError);
-      setError('Unable to load your data. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const calculateBudgetHealth = () => {
-    if (!budgetCategories.length) return 100;
-
-    const totalAllocated = budgetCategories.reduce((sum, cat) => sum + cat.allocated, 0);
-    const totalSpent = budgetCategories.reduce((sum, cat) => sum + cat.spent, 0);
-
-    if (totalAllocated === 0) return 100;
-
-    const utilizationRate = (totalSpent / totalAllocated) * 100;
-
-    if (utilizationRate <= 80) return 100;
-    if (utilizationRate <= 90) return 90;
-    if (utilizationRate <= 100) return 80;
-    return Math.max(0, 80 - (utilizationRate - 100));
-  };
-
-  const handleOpenBudgetSetup = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setShowBudgetModal(true);
-  };
-
-  const handleSaveBudgetAllocations = async () => {
-    try {
-      const updatedFinancialData: FinancialData = {
-        ...(financialData as FinancialData),
-        budgetCategories,
-        budgetHealthScore: calculateBudgetHealth(),
-      };
-
-      await storage.setFinancialData(updatedFinancialData);
-      setFinancialData(updatedFinancialData);
-      setShowBudgetModal(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (saveError) {
-      console.error('Failed to save budget:', saveError);
-      Alert.alert('Save Failed', 'Unable to save budget allocations.');
-    }
-  };
-
-  const handleAddBudgetItem = () => {
-    if (!newItemName.trim()) {
-      Alert.alert('Required', 'Please enter a budget item name');
-      return;
-    }
-
-    const allocation = parseFloat(newItemAllocation) || 0;
-
-    const newItem: BudgetCategory = {
-      id: Date.now().toString(),
-      name: newItemName.trim(),
-      allocated: allocation,
-      spent: 0,
-      icon: newItemIcon,
-      color: newItemColor,
-    };
-
-    setBudgetCategories((prev) => [...prev, newItem]);
-    setNewItemName('');
-    setNewItemIcon('home');
-    setNewItemColor('#E11D48');
-    setNewItemAllocation('');
-    setShowAddItemModal(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  };
-
-  const handleDeleteBudgetItem = (id: string) => {
-    Alert.alert(
-      'Delete Budget Item',
-      'Are you sure you want to delete this budget item?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setBudgetCategories((prev) => prev.filter((item) => item.id !== id));
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          },
-        },
-      ]
-    );
-  };
-
-  const handleLogSpending = async () => {
+  const handleLogSpending = useCallback(async () => {
     const amount = parseFloat(spendingAmount);
     if (!amount || amount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid spending amount.');
       return;
     }
 
-    if (!financialData || !rolloverState) return;
-
+    setIsSubmitting(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const success = await actions.addExpense({
+        amount,
+        category: selectedCategory,
+        description: spendingDescription.trim() || undefined,
+      });
 
-      const newTotalSpent = rolloverState.todayEntry.totalSpent + amount;
-
-      const updatedFinancialData: FinancialData = {
-        ...financialData,
-        dailySpending: newTotalSpent,
-      };
-      await storage.setFinancialData(updatedFinancialData);
-      setFinancialData(updatedFinancialData);
-
-      const updatedRollover = await updateDailySpending(newTotalSpent, updatedFinancialData);
-      setRolloverState(updatedRollover);
-
-      const finalData: FinancialData = {
-        ...updatedFinancialData,
-        streakDays: updatedRollover.momentumStreak,
-      };
-      await storage.setFinancialData(finalData);
-      setFinancialData(finalData);
-
-      setSpendingAmount('');
-      setShowLogSpendingModal(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setSpendingAmount('');
+        setSpendingDescription('');
+        setShowLogModal(false);
+      } else {
+        Alert.alert('Error', 'Failed to log spending. Please try again.');
+      }
     } catch (logError) {
       console.error('Failed to log spending:', logError);
       Alert.alert('Error', 'Failed to log spending. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [spendingAmount, spendingDescription, selectedCategory, actions]);
+
+  const handleDeleteExpense = useCallback((expense: Expense) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      'Delete Expense',
+      `Remove ${formatCurrency(currency, expense.amount)} ${expense.description || expense.category}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const success = await actions.deleteExpense(expense.id);
+            if (success) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } else {
+              Alert.alert('Error', 'Failed to delete expense.');
+            }
+          },
+        },
+      ]
+    );
+  }, [currency, actions]);
+
+  const handleRefresh = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await actions.refreshAll();
+  }, [actions]);
+
+  const getStreakLabel = (): string => {
+    if (momentumStreak === 0) return 'Start your streak!';
+    if (momentumStreak === 1) return 'Day';
+    return 'Days';
+  };
+
+  const getCategoryEmoji = (category: string): string => {
+    const found = ALL_CATEGORIES.find((c) => c.key === category);
+    return found?.emoji || '\uD83D\uDCCC';
+  };
+
+  const getCategoryLabel = (category: string): string => {
+    const found = ALL_CATEGORIES.find((c) => c.key === category);
+    return found?.label || 'Other';
+  };
+
+  const getCategoryColor = (category: string): string => {
+    const found = ALL_CATEGORIES.find((c) => c.key === category);
+    return found?.color || '#6B7280';
+  };
+
+  const formatTime = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
     }
   };
 
-  // --- Loading State ---
+  const getDailyWinMessage = (): string => {
+    const remaining = todayRemaining;
+    if (remaining >= todayEffectiveLimit * 0.5) return 'Crushing it! Over 50% remaining!';
+    if (remaining >= todayEffectiveLimit * 0.25) return 'Looking great! Staying disciplined.';
+    if (remaining > 0) return 'Under budget! Keep the momentum.';
+    return '';
+  };
+
+  // ─── Loading State ─────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <LinearGradient colors={Gradients.background} style={styles.container}>
@@ -239,8 +409,8 @@ export default function HomeScreen() {
     );
   }
 
-  // --- Error State ---
-  if (error || !financialData) {
+  // ─── Error / Empty Financial Data State ────────────────────────────────────
+  if (!financialData) {
     return (
       <LinearGradient colors={Gradients.background} style={styles.container}>
         <View style={styles.centerContainer}>
@@ -248,13 +418,13 @@ export default function HomeScreen() {
             <Ionicons name="alert-circle-outline" size={56} color={Colors.radiantMagenta} />
           </View>
           <Text style={[styles.errorText, { color: Colors.primaryText }]}>
-            {error || 'Unable to load data'}
+            Setup Required
           </Text>
           <Text style={[styles.errorSubtext, { color: Colors.tertiaryText }]}>
-            Check your connection and try again
+            Please complete your financial blueprint to get started.
           </Text>
           <PressableScale
-            onPress={loadData}
+            onPress={handleRefresh}
             style={[styles.retryButton, { backgroundColor: Colors.electricTeal }]}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
@@ -264,44 +434,32 @@ export default function HomeScreen() {
     );
   }
 
-  const currency = financialData?.currency || '\u00A3';
-
-  // Rollover-powered values
-  const todayEffectiveLimit = rolloverState?.todayEntry.effectiveLimit ?? financialData.dailyBudget;
-  const todayTotalSpent = rolloverState?.todayEntry.totalSpent ?? financialData.dailySpending;
-  const todayRemaining = todayEffectiveLimit - todayTotalSpent;
-  const tomorrowForecast = rolloverState?.tomorrowForecast ?? financialData.dailyBudget;
-  const momentumStreak = rolloverState?.momentumStreak ?? financialData.streakDays;
-  const isUnderBudget = todayTotalSpent <= todayEffectiveLimit;
-  const spendingPercentage = todayEffectiveLimit > 0
-    ? Math.min((todayTotalSpent / todayEffectiveLimit) * 100, 100)
-    : 0;
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 18) return 'Good Afternoon';
-    return 'Good Evening';
-  };
-
-  const getStreakLabel = () => {
-    if (momentumStreak === 0) return 'Start your streak!';
-    if (momentumStreak === 1) return 'Day';
-    return 'Days';
-  };
-
+  // ─── Main Render ───────────────────────────────────────────────────────────
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
-        {/* ============ HEADER ============ */}
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + 120 },
+        ]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.electricTeal}
+            progressBackgroundColor={Colors.cardBackground}
+          />
+        }
+      >
+        {/* ════════ HEADER ════════ */}
         <View style={styles.header}>
-          <View>
-            <Text style={[styles.greeting, { color: Colors.primaryText }]}>
-              {getGreeting()}!
+          <View style={styles.headerLeft}>
+            <Text style={[styles.headerBrand, { color: Colors.electricTeal }]}>
+              Grit: Mom-Boss Edition
             </Text>
-            <Text style={[styles.subtitle, { color: Colors.electricTeal }]}>
-              {userData?.name || 'Mom Boss'}
+            <Text style={[styles.greeting, { color: Colors.primaryText }]}>
+              {getGreeting()}, {profile?.name || 'Boss'}
             </Text>
           </View>
           <PressableScale
@@ -326,121 +484,167 @@ export default function HomeScreen() {
           </PressableScale>
         </View>
 
-        {/* ============ DAILY SPENDING DASHBOARD ============ */}
-        <GlassCard animated delay={0} style={styles.dailySpendingCard}>
-          <View style={styles.dailySpendingHeader}>
-            <View>
-              <Text style={[styles.dailySpendingLabel, { color: Colors.tertiaryText }]}>
-                Today&apos;s Limit
-              </Text>
-              <Text style={[styles.dailySpendingDate, { color: Colors.tertiaryText }]}>
-                {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-              </Text>
-            </View>
-            <View style={styles.dailySpendingAmounts}>
-              <Text style={[styles.dailySpendingValue, { color: Colors.primaryText }]}>
-                {formatCurrency(currency, todayEffectiveLimit)}
-              </Text>
-              {rolloverState && rolloverState.todayEntry.rolloverFromPrevious !== 0 && (
-                <View style={[
-                  styles.rolloverBadge,
+        {/* ════════ HERO: SPENDABLE TODAY + WELLNESS RING ════════ */}
+        <Animated.View style={{ opacity: heroOpacityAnim, transform: [{ scale: heroScaleAnim }] }}>
+          <GlassCard animated delay={0} style={styles.heroCard}>
+            <View style={styles.heroContent}>
+              {/* Left side - Spendable Amount */}
+              <View style={styles.heroLeft}>
+                <Text style={[styles.heroLabel, { color: Colors.tertiaryText }]}>
+                  Spendable Today
+                </Text>
+                <Text style={[
+                  styles.heroAmount,
                   {
-                    backgroundColor: rolloverState.todayEntry.rolloverFromPrevious > 0
-                      ? (isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.08)')
-                      : (isDark ? 'rgba(225, 29, 72, 0.12)' : 'rgba(225, 29, 72, 0.08)'),
+                    color: isUnderBudget ? Colors.electricTeal : Colors.radiantMagenta,
                   },
                 ]}>
-                  <Ionicons
-                    name={rolloverState.todayEntry.rolloverFromPrevious > 0 ? 'arrow-up-circle' : 'arrow-down-circle'}
-                    size={14}
-                    color={rolloverState.todayEntry.rolloverFromPrevious > 0 ? Colors.glowingGreen : Colors.radiantMagenta}
-                  />
-                  <Text style={[
-                    styles.rolloverText,
-                    { color: rolloverState.todayEntry.rolloverFromPrevious > 0 ? Colors.glowingGreen : Colors.radiantMagenta },
+                  {formatCurrency(currency, Math.max(spendableToday, 0))}
+                </Text>
+                <Text style={[styles.heroDate, { color: Colors.tertiaryText }]}>
+                  {new Date().toLocaleDateString('en-GB', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                </Text>
+
+                {/* Rollover badge */}
+                {rolloverState && rolloverState.todayEntry.rolloverFromPrevious !== 0 && (
+                  <View style={[
+                    styles.rolloverBadge,
+                    {
+                      backgroundColor: rolloverState.todayEntry.rolloverFromPrevious > 0
+                        ? (isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.08)')
+                        : (isDark ? 'rgba(225, 29, 72, 0.12)' : 'rgba(225, 29, 72, 0.08)'),
+                    },
                   ]}>
-                    {rolloverState.todayEntry.rolloverFromPrevious > 0 ? '+' : ''}
-                    {formatCurrency(currency, rolloverState.todayEntry.rolloverFromPrevious)} rollover
+                    <Ionicons
+                      name={rolloverState.todayEntry.rolloverFromPrevious > 0 ? 'arrow-up-circle' : 'arrow-down-circle'}
+                      size={14}
+                      color={rolloverState.todayEntry.rolloverFromPrevious > 0 ? Colors.glowingGreen : Colors.radiantMagenta}
+                    />
+                    <Text style={[
+                      styles.rolloverText,
+                      { color: rolloverState.todayEntry.rolloverFromPrevious > 0 ? Colors.glowingGreen : Colors.radiantMagenta },
+                    ]}>
+                      {rolloverState.todayEntry.rolloverFromPrevious > 0 ? '+' : '-'}
+                      {formatCurrency(currency, rolloverState.todayEntry.rolloverFromPrevious)} rollover
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Right side - Wellness Ring */}
+              <View style={styles.heroRight}>
+                <WellnessRing score={wellnessScore} size={100} strokeWidth={8} />
+                <Text style={[styles.wellnessLabel, { color: Colors.tertiaryText }]}>
+                  Wellness
+                </Text>
+              </View>
+            </View>
+
+            {/* Neon Glow Progress Bar */}
+            <View style={styles.progressSection}>
+              <View style={styles.progressLabels}>
+                <Text style={[styles.progressLabelText, { color: Colors.tertiaryText }]}>
+                  Spent: {formatCurrency(currency, todayTotalSpent)}
+                </Text>
+                <Text style={[styles.progressLabelText, { color: Colors.tertiaryText }]}>
+                  Limit: {formatCurrency(currency, todayEffectiveLimit)}
+                </Text>
+              </View>
+              <AnimatedProgressBar
+                percentage={spendingPercentage}
+                isUnderBudget={isUnderBudget}
+                colors={Colors}
+                gradients={Gradients}
+                isDark={isDark}
+              />
+            </View>
+
+            {/* Status Message */}
+            <View style={styles.dailyStatusContainer}>
+              {isUnderBudget ? (
+                <View style={styles.dailyStatusRow}>
+                  <Ionicons name="checkmark-circle" size={16} color={Colors.glowingGreen} />
+                  <Text style={[styles.dailyStatusText, { color: Colors.glowingGreen }]}>
+                    {formatCurrency(currency, todayRemaining)} remaining today
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.dailyStatusRow}>
+                  <Ionicons name="alert-circle" size={16} color={Colors.radiantMagenta} />
+                  <Text style={[styles.dailyStatusText, { color: Colors.radiantMagenta }]}>
+                    {formatCurrency(currency, Math.abs(todayRemaining))} over budget
                   </Text>
                 </View>
               )}
             </View>
-          </View>
+          </GlassCard>
+        </Animated.View>
 
-          {/* Neon Glow Progress Bar */}
-          <View style={[
-            styles.progressBarContainer,
-            { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream },
-          ]}>
-            <View style={[
-              styles.progressBarGlow,
-              {
-                width: `${spendingPercentage}%` as any,
-                shadowColor: isUnderBudget ? Colors.electricTeal : Colors.radiantMagenta,
-              },
-            ]}>
+        {/* ════════ DAILY WIN ════════ */}
+        {isUnderBudget && todayTotalSpent > 0 && (
+          <Animated.View style={{
+            opacity: dailyWinAnim,
+            transform: [{ scale: dailyWinAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }],
+          }}>
+            <GlassCard animated delay={100} style={styles.dailyWinCard}>
               <LinearGradient
-                colors={
-                  !isUnderBudget
-                    ? [Colors.radiantMagenta, Colors.sunKissedAmber]
-                    : Gradients.neonBar
-                }
-                style={styles.progressBarFill}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              />
-            </View>
-          </View>
+                colors={isDark ? ['rgba(16, 185, 129, 0.08)', 'rgba(45, 212, 191, 0.04)'] : ['rgba(16, 185, 129, 0.06)', 'rgba(20, 184, 166, 0.03)']}
+                style={styles.dailyWinGradient}
+              >
+                <View style={styles.dailyWinContent}>
+                  <Text style={styles.dailyWinEmoji}>{'\u2B50'}</Text>
+                  <View style={styles.dailyWinTextContainer}>
+                    <Text style={[styles.dailyWinTitle, { color: Colors.glowingGreen }]}>
+                      Daily Win!
+                    </Text>
+                    <Text style={[styles.dailyWinMessage, { color: Colors.secondaryText }]}>
+                      {getDailyWinMessage()}
+                    </Text>
+                  </View>
+                  <View style={[styles.dailyWinBadge, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.1)' }]}>
+                    <Ionicons name="trending-up" size={18} color={Colors.glowingGreen} />
+                  </View>
+                </View>
+              </LinearGradient>
+            </GlassCard>
+          </Animated.View>
+        )}
 
-          {/* Status Message */}
-          <View style={styles.dailyStatusContainer}>
-            {isUnderBudget ? (
-              <View style={styles.dailyStatusRow}>
-                <Ionicons name="checkmark-circle" size={16} color={Colors.glowingGreen} />
-                <Text style={[styles.dailyStatusText, { color: Colors.glowingGreen }]}>
-                  {formatCurrency(currency, todayRemaining)} remaining today
+        {/* ════════ QUICK-LOG CATEGORIES ════════ */}
+        <View style={styles.quickLogSection}>
+          <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Quick Log</Text>
+          <View style={styles.quickLogRow}>
+            {QUICK_CATEGORIES.map((cat) => (
+              <PressableScale
+                key={cat.key}
+                onPress={() => handleOpenLogModal(cat.key)}
+                style={styles.quickLogItem}
+                scaleValue={0.93}
+              >
+                <LinearGradient
+                  colors={[cat.color + '20', cat.color + '08']}
+                  style={[
+                    styles.quickLogIconWrap,
+                    { borderColor: cat.color + '30' },
+                  ]}
+                >
+                  <Text style={styles.quickLogEmoji}>{cat.emoji}</Text>
+                </LinearGradient>
+                <Text style={[styles.quickLogLabel, { color: Colors.secondaryText }]} numberOfLines={1}>
+                  {cat.label}
                 </Text>
-              </View>
-            ) : (
-              <View style={styles.dailyStatusRow}>
-                <Ionicons name="alert-circle" size={16} color={Colors.radiantMagenta} />
-                <Text style={[styles.dailyStatusText, { color: Colors.radiantMagenta }]}>
-                  {formatCurrency(currency, Math.abs(todayRemaining))} over budget
-                </Text>
-              </View>
-            )}
+              </PressableScale>
+            ))}
           </View>
-        </GlassCard>
-
-        {/* ============ METRICS ROW ============ */}
-        <View style={styles.metricsRow}>
-          <GlassCard animated delay={100} style={styles.metricCard}>
-            <View style={[styles.metricIconBg, { backgroundColor: isDark ? 'rgba(225, 29, 72, 0.15)' : '#E11D4815' }]}>
-              <Ionicons name="receipt-outline" size={20} color={Colors.radiantMagenta} />
-            </View>
-            <Text style={[styles.metricValue, { color: Colors.primaryText }]}>
-              {formatCurrency(currency, todayTotalSpent)}
-            </Text>
-            <Text style={[styles.metricLabel, { color: Colors.tertiaryText }]}>Spent Today</Text>
-          </GlassCard>
-
-          <GlassCard animated delay={200} style={styles.metricCard}>
-            <View style={[styles.metricIconBg, { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.15)' : '#A855F715' }]}>
-              <Ionicons name="telescope-outline" size={20} color={Colors.amethyst} />
-            </View>
-            <Text style={[styles.metricValue, { color: Colors.primaryText }]}>
-              {formatCurrency(currency, tomorrowForecast)}
-            </Text>
-            <Text style={[styles.metricLabel, { color: Colors.tertiaryText }]}>Tomorrow</Text>
-          </GlassCard>
         </View>
 
-        {/* ============ LOG SPENDING BUTTON ============ */}
+        {/* ════════ LOG SPENDING CTA ════════ */}
         <PressableScale
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setShowLogSpendingModal(true);
-          }}
+          onPress={() => handleOpenLogModal()}
           style={styles.logSpendingButton}
           scaleValue={0.96}
         >
@@ -451,108 +655,46 @@ export default function HomeScreen() {
             end={{ x: 1, y: 0 }}
           >
             <Ionicons name="add-circle-outline" size={24} color="#FFFFFF" />
-            <Text style={styles.logSpendingText}>Log Today&apos;s Spending</Text>
+            <Text style={styles.logSpendingText}>Log Spending</Text>
           </LinearGradient>
         </PressableScale>
 
-        {/* ============ MONTHLY BUDGET CATEGORIES ============ */}
-        <View style={styles.budgetSection}>
-          <View style={styles.budgetSectionHeader}>
-            <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Monthly Budget</Text>
-            <View style={styles.budgetHeaderActions}>
-              <PressableScale
-                onPress={() => setShowAddItemModal(true)}
-                style={[styles.addButton, { backgroundColor: Colors.electricTeal }]}
-              >
-                <Ionicons name="add" size={20} color={Colors.white} />
-              </PressableScale>
-              {budgetCategories.length > 0 && (
-                <PressableScale onPress={handleOpenBudgetSetup}>
-                  <Ionicons name="settings-outline" size={20} color={Colors.electricTeal} />
-                </PressableScale>
-              )}
+        {/* ════════ BURN RATE + TOMORROW FORECAST ROW ════════ */}
+        <View style={styles.metricsRow}>
+          <GlassCard animated delay={200} style={styles.metricCard}>
+            <View style={[styles.metricIconBg, { backgroundColor: isDark ? 'rgba(225, 29, 72, 0.15)' : '#E11D4815' }]}>
+              <Ionicons name="speedometer-outline" size={20} color={Colors.radiantMagenta} />
             </View>
-          </View>
+            <Text style={[styles.metricValue, { color: Colors.primaryText }]}>
+              {burnRate}%
+            </Text>
+            <Text style={[styles.metricLabel, { color: Colors.tertiaryText }]}>Burn Rate</Text>
+          </GlassCard>
 
-          {budgetCategories.length === 0 ? (
-            <GlassCard animated delay={300}>
-              <EmptyState
-                icon="wallet-outline"
-                iconColor={Colors.electricTeal}
-                title="Create Your Budget"
-                description="Start by adding custom budget items that match your spending needs."
-                actionLabel="Create First Budget Item"
-                onAction={() => setShowAddItemModal(true)}
-                gradientColors={[Colors.electricTeal, Colors.glowingGreen]}
-              />
-            </GlassCard>
-          ) : (
-            <View style={styles.budgetGrid}>
-              {budgetCategories.map((category, index) => (
-                <GlassCard
-                  key={category.id}
-                  animated
-                  delay={300 + index * 80}
-                  style={styles.budgetCategoryCard}
-                >
-                  <BudgetCategoryRing
-                    label={category.name}
-                    allocated={category.allocated}
-                    spent={category.spent}
-                    currency={currency}
-                    size={100}
-                    tealColor={Colors.electricTeal}
-                    amberColor={Colors.sunKissedAmber}
-                  />
-                </GlassCard>
-              ))}
+          <GlassCard animated delay={300} style={styles.metricCard}>
+            <View style={[styles.metricIconBg, { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.15)' : '#A855F715' }]}>
+              <Ionicons name="telescope-outline" size={20} color={Colors.amethyst} />
             </View>
-          )}
+            <Text style={[styles.metricValue, { color: Colors.primaryText }]}>
+              {formatCurrency(currency, tomorrowForecast)}
+            </Text>
+            <Text style={[styles.metricLabel, { color: Colors.tertiaryText }]}>Tomorrow</Text>
+          </GlassCard>
         </View>
 
-        {/* ============ QUICK-LOG ============ */}
-        {budgetCategories.length > 0 && (
-          <View style={styles.quickLogSection}>
-            <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Quick-Log</Text>
-            <View style={styles.quickActions}>
-              {budgetCategories.slice(0, 4).map((cat, index) => (
-                <PressableScale
-                  key={cat.id}
-                  onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
-                  style={styles.quickAction}
-                  scaleValue={0.93}
-                >
-                  <LinearGradient
-                    colors={[cat.color, cat.color + 'DD']}
-                    style={styles.quickActionGradient}
-                  >
-                    <Ionicons name={cat.icon as any} size={28} color={Colors.white} />
-                    <Text style={styles.quickActionText} numberOfLines={1}>{cat.name}</Text>
-                  </LinearGradient>
-                </PressableScale>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* ============ MOMENTUM STREAK ============ */}
-        <GlassCard animated delay={500} style={styles.momentumStreakCard}>
+        {/* ════════ MOMENTUM STREAK ════════ */}
+        <GlassCard animated delay={400} style={styles.momentumStreakCard}>
           <View style={styles.momentumStreakContent}>
             <View style={styles.momentumStreakLeft}>
-              <View style={styles.streakFireWrap}>
-                <Svg width={52} height={52} viewBox="0 0 52 52">
-                  <Defs>
-                    <SvgGradient id="fireGrad" x1="0" y1="0" x2="0" y2="1">
-                      <Stop offset="0" stopColor="#F59E0B" stopOpacity="0.9" />
-                      <Stop offset="0.5" stopColor="#EF4444" stopOpacity="0.7" />
-                      <Stop offset="1" stopColor="#E11D48" stopOpacity="0.4" />
-                    </SvgGradient>
-                  </Defs>
-                  <Rect x="0" y="0" width="52" height="52" rx="16" fill="url(#fireGrad)" />
-                </Svg>
-                <View style={styles.streakEmojiOverlay}>
-                  <Text style={styles.streakEmojiLarge}>{'\uD83D\uDD25'}</Text>
-                </View>
+              <View style={[
+                styles.streakIconWrap,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(245, 158, 11, 0.12)'
+                    : 'rgba(245, 158, 11, 0.08)',
+                },
+              ]}>
+                <Text style={styles.streakEmoji}>{'\uD83D\uDD25'}</Text>
               </View>
               <View style={styles.momentumStreakInfo}>
                 <Text style={[styles.momentumStreakTitle, { color: Colors.primaryText }]}>
@@ -599,354 +741,308 @@ export default function HomeScreen() {
           )}
         </GlassCard>
 
-      </ScrollView>
-
-      {/* ============ LOG SPENDING MODAL ============ */}
-      <Modal
-        visible={showLogSpendingModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowLogSpendingModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkPurple : Colors.white, borderColor: Colors.glassBorder }]}>
-            <View style={[styles.modalHandle, { backgroundColor: Colors.tertiaryText }]} />
-
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>Log Spending</Text>
-              <PressableScale onPress={() => setShowLogSpendingModal(false)}>
-                <Ionicons name="close-circle" size={28} color={Colors.tertiaryText} />
-              </PressableScale>
-            </View>
-
-            {/* Current Status */}
-            <View style={[styles.logStatusCard, {
-              backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
-              borderColor: Colors.glassBorder,
-            }]}>
-              <View style={styles.logStatusRow}>
-                <Text style={[styles.logStatusLabel, { color: Colors.tertiaryText }]}>Today&apos;s Limit</Text>
-                <Text style={[styles.logStatusValue, { color: Colors.electricTeal }]}>
-                  {formatCurrency(currency, todayEffectiveLimit)}
-                </Text>
+        {/* ════════ TOMORROW FORECAST SECTION ════════ */}
+        <GlassCard animated delay={450} style={styles.forecastCard}>
+          <View style={styles.forecastContent}>
+            <View style={styles.forecastLeft}>
+              <View style={[
+                styles.forecastIconWrap,
+                { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.12)' : 'rgba(168, 85, 247, 0.08)' },
+              ]}>
+                <Ionicons name="sunny-outline" size={22} color={Colors.amethyst} />
               </View>
-              <View style={styles.logStatusRow}>
-                <Text style={[styles.logStatusLabel, { color: Colors.tertiaryText }]}>Already Spent</Text>
-                <Text style={[styles.logStatusValue, { color: Colors.primaryText }]}>
-                  {formatCurrency(currency, todayTotalSpent)}
+              <View style={styles.forecastInfo}>
+                <Text style={[styles.forecastTitle, { color: Colors.primaryText }]}>
+                  Tomorrow&apos;s Forecast
                 </Text>
-              </View>
-              <View style={[styles.logStatusDivider, { backgroundColor: Colors.glassBorder }]} />
-              <View style={styles.logStatusRow}>
-                <Text style={[styles.logStatusLabelBold, { color: Colors.primaryText }]}>Remaining</Text>
-                <Text style={[styles.logStatusValueBold, {
-                  color: isUnderBudget ? Colors.glowingGreen : Colors.radiantMagenta,
-                }]}>
-                  {formatCurrency(currency, todayRemaining)}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Amount Spent</Text>
-            <View style={[styles.budgetInputField, {
-              backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
-              borderColor: Colors.glassBorder,
-            }]}>
-              <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
-              <TextInput
-                style={[styles.budgetInput, { color: Colors.primaryText }]}
-                placeholder="0.00"
-                placeholderTextColor={Colors.mediumGray}
-                keyboardType="decimal-pad"
-                value={spendingAmount}
-                onChangeText={setSpendingAmount}
-                autoFocus
-              />
-            </View>
-
-            {spendingAmount && parseFloat(spendingAmount) > 0 && (
-              <View style={[styles.spendingPreview, {
-                backgroundColor: isDark ? 'rgba(45, 27, 61, 0.4)' : Colors.lightCream + '80',
-                borderColor: Colors.glassBorder,
-              }]}>
-                <Ionicons
-                  name={parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? 'checkmark-circle' : 'warning'}
-                  size={18}
-                  color={parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? Colors.glowingGreen : Colors.sunKissedAmber}
-                />
-                <Text style={[styles.spendingPreviewText, {
-                  color: parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? Colors.glowingGreen : Colors.sunKissedAmber,
-                }]}>
-                  {parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit
-                    ? `Still under budget \u2014 ${formatCurrency(currency, todayRemaining - parseFloat(spendingAmount))} left`
-                    : `Over budget by ${formatCurrency(currency, parseFloat(spendingAmount) + todayTotalSpent - todayEffectiveLimit)}`
+                <Text style={[styles.forecastSubtitle, { color: Colors.tertiaryText }]}>
+                  {isUnderBudget
+                    ? 'Your savings roll over!'
+                    : 'Overage will reduce tomorrow'
                   }
                 </Text>
               </View>
+            </View>
+            <Text style={[styles.forecastAmount, {
+              color: tomorrowForecast >= dailyAllowance ? Colors.electricTeal : Colors.sunKissedAmber,
+            }]}>
+              {formatCurrency(currency, tomorrowForecast)}
+            </Text>
+          </View>
+        </GlassCard>
+
+        {/* ════════ TODAY'S TRANSACTIONS FEED ════════ */}
+        <View style={styles.transactionSection}>
+          <View style={styles.transactionHeader}>
+            <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>
+              Today&apos;s Spending
+            </Text>
+            {todayExpenses.length > 0 && (
+              <View style={[styles.transactionCount, { backgroundColor: Colors.electricTeal + '20' }]}>
+                <Text style={[styles.transactionCountText, { color: Colors.electricTeal }]}>
+                  {todayExpenses.length}
+                </Text>
+              </View>
             )}
-
-            <PressableScale
-              onPress={handleLogSpending}
-              style={styles.saveButton}
-              scaleValue={0.97}
-            >
-              <LinearGradient
-                colors={[Colors.electricTeal, Colors.glowingGreen]}
-                style={styles.saveButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Text style={styles.saveButtonText}>Log Spending</Text>
-              </LinearGradient>
-            </PressableScale>
           </View>
-        </View>
-      </Modal>
 
-      {/* ============ BUDGET ALLOCATION MODAL ============ */}
-      <Modal
-        visible={showBudgetModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowBudgetModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkPurple : Colors.white, borderColor: Colors.glassBorder }]}>
-            <View style={[styles.modalHandle, { backgroundColor: Colors.tertiaryText }]} />
-
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>Set Budget</Text>
-              <PressableScale onPress={() => setShowBudgetModal(false)}>
-                <Ionicons name="close-circle" size={28} color={Colors.tertiaryText} />
-              </PressableScale>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {budgetCategories.map((category, index) => (
-                <View key={category.id} style={styles.budgetInputRow}>
-                  <View style={styles.budgetInputHeader}>
-                    <View style={styles.budgetInputLabelRow}>
-                      <View style={[styles.budgetItemIconWrap, { backgroundColor: category.color + '20' }]}>
-                        <Ionicons name={category.icon as any} size={18} color={category.color} />
+          {todayExpenses.length === 0 ? (
+            <GlassCard animated delay={500}>
+              <EmptyState
+                icon="receipt-outline"
+                iconColor={Colors.electricTeal}
+                title="No Expenses Yet"
+                description="Tap 'Log Spending' or use Quick Log to track your first expense today."
+                actionLabel="Log First Expense"
+                onAction={() => handleOpenLogModal()}
+                gradientColors={[Colors.electricTeal, Colors.glowingGreen]}
+              />
+            </GlassCard>
+          ) : (
+            <View style={styles.transactionList}>
+              {todayExpenses
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .map((expense, index) => (
+                  <GlassCard key={expense.id} animated delay={500 + index * 60} style={styles.transactionCard}>
+                    <View style={styles.transactionRow}>
+                      <View style={styles.transactionLeft}>
+                        <View style={[
+                          styles.transactionIconWrap,
+                          { backgroundColor: getCategoryColor(expense.category) + '18' },
+                        ]}>
+                          <Text style={styles.transactionEmoji}>{getCategoryEmoji(expense.category)}</Text>
+                        </View>
+                        <View style={styles.transactionDetails}>
+                          <Text style={[styles.transactionName, { color: Colors.primaryText }]} numberOfLines={1}>
+                            {expense.description || getCategoryLabel(expense.category)}
+                          </Text>
+                          <Text style={[styles.transactionMeta, { color: Colors.tertiaryText }]}>
+                            {getCategoryLabel(expense.category)} {'\u00B7'} {formatTime(expense.createdAt)}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={[styles.budgetInputName, { color: Colors.primaryText }]}>
-                        {category.name}
-                      </Text>
+                      <View style={styles.transactionRight}>
+                        <Text style={[styles.transactionAmount, { color: Colors.radiantMagenta }]}>
+                          -{formatCurrency(currency, expense.amount)}
+                        </Text>
+                        <PressableScale
+                          onPress={() => handleDeleteExpense(expense)}
+                          style={[
+                            styles.deleteButton,
+                            { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.06)' },
+                          ]}
+                          scaleValue={0.88}
+                        >
+                          <Ionicons name="trash-outline" size={14} color={Colors.error} />
+                        </PressableScale>
+                      </View>
                     </View>
-                    <PressableScale
-                      onPress={() => handleDeleteBudgetItem(category.id)}
-                      style={styles.deleteItemButton}
-                    >
-                      <Ionicons name="trash-outline" size={18} color={Colors.error} />
-                    </PressableScale>
-                  </View>
-                  <View style={[styles.budgetInputField, {
-                    backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
-                    borderColor: Colors.glassBorder,
-                  }]}>
-                    <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
-                    <TextInput
-                      style={[styles.budgetInput, { color: Colors.primaryText }]}
-                      placeholder="0"
-                      placeholderTextColor={Colors.mediumGray}
-                      keyboardType="numeric"
-                      value={category.allocated.toString()}
-                      onChangeText={(value) => {
-                        const newCategories = [...budgetCategories];
-                        newCategories[index].allocated = parseFloat(value) || 0;
-                        setBudgetCategories(newCategories);
-                      }}
-                    />
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-
-            <PressableScale
-              onPress={handleSaveBudgetAllocations}
-              style={styles.saveButton}
-              scaleValue={0.97}
-            >
-              <LinearGradient
-                colors={[Colors.electricTeal, Colors.glowingGreen]}
-                style={styles.saveButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Text style={styles.saveButtonText}>Save Budget</Text>
-              </LinearGradient>
-            </PressableScale>
-          </View>
+                  </GlassCard>
+                ))}
+            </View>
+          )}
         </View>
-      </Modal>
 
-      {/* ============ ADD BUDGET ITEM MODAL ============ */}
+      </ScrollView>
+
+      {/* ════════ LOG SPENDING MODAL ════════ */}
       <Modal
-        visible={showAddItemModal}
+        visible={showLogModal}
         animationType="slide"
         transparent
-        onRequestClose={() => setShowAddItemModal(false)}
+        onRequestClose={() => setShowLogModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: isDark ? Colors.darkPurple : Colors.white, borderColor: Colors.glassBorder }]}>
-            <View style={[styles.modalHandle, { backgroundColor: Colors.tertiaryText }]} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalOverlay}>
+            <PressableScale
+              onPress={() => setShowLogModal(false)}
+              style={styles.modalBackdrop}
+              haptic={false}
+            >
+              <View />
+            </PressableScale>
+            <View style={[
+              styles.modalContent,
+              {
+                backgroundColor: isDark ? Colors.darkPurple : Colors.white,
+                borderColor: Colors.glassBorder,
+                paddingBottom: Math.max(insets.bottom, Spacing.lg),
+              },
+            ]}>
+              <View style={[styles.modalHandle, { backgroundColor: Colors.tertiaryText }]} />
 
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>New Budget Item</Text>
-              <PressableScale onPress={() => setShowAddItemModal(false)}>
-                <Ionicons name="close-circle" size={28} color={Colors.tertiaryText} />
-              </PressableScale>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Item Name */}
-              <View style={styles.inputSection}>
-                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Item Name</Text>
-                <TextInput
-                  style={[styles.textInput, {
-                    backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
-                    borderColor: Colors.glassBorder,
-                    color: Colors.primaryText,
-                  }]}
-                  placeholder="e.g., Groceries, Rent, Transportation"
-                  placeholderTextColor={Colors.mediumGray}
-                  value={newItemName}
-                  onChangeText={setNewItemName}
-                  maxLength={30}
-                />
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>Log Spending</Text>
+                <PressableScale onPress={() => setShowLogModal(false)}>
+                  <Ionicons name="close-circle" size={28} color={Colors.tertiaryText} />
+                </PressableScale>
               </View>
 
-              {/* Icon Selection */}
-              <View style={styles.inputSection}>
-                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Choose Icon</Text>
-                <View style={styles.iconGrid}>
-                  {AVAILABLE_ICONS.map((item) => (
-                    <PressableScale
-                      key={item.icon}
-                      onPress={() => {
-                        setNewItemIcon(item.icon);
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }}
-                      style={[
-                        styles.iconOption,
-                        {
-                          backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
-                          borderColor: Colors.glassBorder,
-                        },
-                        newItemIcon === item.icon && {
-                          borderColor: Colors.electricTeal,
-                          borderWidth: 2,
-                          backgroundColor: Colors.electricTeal + '15',
-                        },
-                      ]}
-                      scaleValue={0.9}
-                    >
-                      <Ionicons
-                        name={item.icon as any}
-                        size={24}
-                        color={newItemIcon === item.icon ? Colors.electricTeal : Colors.tertiaryText}
-                      />
-                    </PressableScale>
-                  ))}
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {/* Current Status Card */}
+                <View style={[styles.logStatusCard, {
+                  backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
+                  borderColor: Colors.glassBorder,
+                }]}>
+                  <View style={styles.logStatusRow}>
+                    <Text style={[styles.logStatusLabel, { color: Colors.tertiaryText }]}>Today&apos;s Limit</Text>
+                    <Text style={[styles.logStatusValue, { color: Colors.electricTeal }]}>
+                      {formatCurrency(currency, todayEffectiveLimit)}
+                    </Text>
+                  </View>
+                  <View style={styles.logStatusRow}>
+                    <Text style={[styles.logStatusLabel, { color: Colors.tertiaryText }]}>Already Spent</Text>
+                    <Text style={[styles.logStatusValue, { color: Colors.primaryText }]}>
+                      {formatCurrency(currency, todayTotalSpent)}
+                    </Text>
+                  </View>
+                  <View style={[styles.logStatusDivider, { backgroundColor: Colors.glassBorder }]} />
+                  <View style={styles.logStatusRow}>
+                    <Text style={[styles.logStatusLabelBold, { color: Colors.primaryText }]}>Remaining</Text>
+                    <Text style={[styles.logStatusValueBold, {
+                      color: isUnderBudget ? Colors.glowingGreen : Colors.radiantMagenta,
+                    }]}>
+                      {isUnderBudget ? '' : '-'}{formatCurrency(currency, todayRemaining)}
+                    </Text>
+                  </View>
                 </View>
-              </View>
 
-              {/* Color Selection */}
-              <View style={styles.inputSection}>
-                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Choose Color</Text>
-                <View style={styles.colorGrid}>
-                  {AVAILABLE_COLORS.map((color) => (
-                    <PressableScale
-                      key={color}
-                      onPress={() => {
-                        setNewItemColor(color);
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }}
-                      style={[
-                        styles.colorOption,
-                        { backgroundColor: color },
-                        newItemColor === color && styles.colorOptionSelected,
-                      ]}
-                      scaleValue={0.88}
-                    >
-                      {newItemColor === color && (
-                        <Ionicons name="checkmark" size={20} color={Colors.white} />
-                      )}
-                    </PressableScale>
-                  ))}
-                </View>
-              </View>
-
-              {/* Allocation Amount */}
-              <View style={styles.inputSection}>
-                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Allocate Money (Optional)</Text>
-                <View style={[styles.budgetInputField, {
+                {/* Amount Input */}
+                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Amount</Text>
+                <View style={[styles.amountInputField, {
                   backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
                   borderColor: Colors.glassBorder,
                 }]}>
                   <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
                   <TextInput
-                    style={[styles.budgetInput, { color: Colors.primaryText }]}
-                    placeholder="0"
+                    style={[styles.amountInput, { color: Colors.primaryText }]}
+                    placeholder="0.00"
                     placeholderTextColor={Colors.mediumGray}
-                    keyboardType="numeric"
-                    value={newItemAllocation}
-                    onChangeText={setNewItemAllocation}
+                    keyboardType="decimal-pad"
+                    value={spendingAmount}
+                    onChangeText={setSpendingAmount}
+                    autoFocus
                   />
                 </View>
-              </View>
 
-              {/* Preview */}
-              <View style={styles.previewSection}>
-                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Preview</Text>
-                <View style={[styles.previewCard, {
-                  backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
-                  borderColor: Colors.glassBorder,
-                }]}>
-                  <View style={[styles.previewIcon, { backgroundColor: newItemColor + '20' }]}>
-                    <Ionicons name={newItemIcon as any} size={32} color={newItemColor} />
-                  </View>
-                  <Text style={[styles.previewText, { color: Colors.primaryText }]}>
-                    {newItemName || 'Budget Item Name'}
-                  </Text>
-                  {newItemAllocation && parseFloat(newItemAllocation) > 0 && (
-                    <Text style={[styles.previewAllocation, { color: Colors.electricTeal }]}>
-                      {formatCurrency(currency, parseFloat(newItemAllocation))} allocated
-                    </Text>
-                  )}
+                {/* Category Selection */}
+                <Text style={[styles.inputLabel, { color: Colors.primaryText, marginTop: Spacing.lg }]}>Category</Text>
+                <View style={styles.categoryGrid}>
+                  {ALL_CATEGORIES.map((cat) => (
+                    <PressableScale
+                      key={cat.key}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSelectedCategory(cat.key);
+                      }}
+                      style={[
+                        styles.categoryChip,
+                        {
+                          backgroundColor: selectedCategory === cat.key
+                            ? cat.color + '20'
+                            : (isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream),
+                          borderColor: selectedCategory === cat.key
+                            ? cat.color
+                            : Colors.glassBorder,
+                        },
+                      ]}
+                      scaleValue={0.93}
+                    >
+                      <Text style={styles.categoryChipEmoji}>{cat.emoji}</Text>
+                      <Text style={[
+                        styles.categoryChipLabel,
+                        {
+                          color: selectedCategory === cat.key
+                            ? cat.color
+                            : Colors.secondaryText,
+                        },
+                      ]}>
+                        {cat.label}
+                      </Text>
+                    </PressableScale>
+                  ))}
                 </View>
-              </View>
-            </ScrollView>
 
-            <PressableScale
-              onPress={handleAddBudgetItem}
-              style={styles.saveButton}
-              scaleValue={0.97}
-            >
-              <LinearGradient
-                colors={[Colors.electricTeal, Colors.glowingGreen]}
-                style={styles.saveButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
+                {/* Description Input */}
+                <Text style={[styles.inputLabel, { color: Colors.primaryText, marginTop: Spacing.lg }]}>
+                  Description (optional)
+                </Text>
+                <TextInput
+                  style={[styles.descriptionInput, {
+                    backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
+                    borderColor: Colors.glassBorder,
+                    color: Colors.primaryText,
+                  }]}
+                  placeholder="e.g., Weekly shop at Tesco"
+                  placeholderTextColor={Colors.mediumGray}
+                  value={spendingDescription}
+                  onChangeText={setSpendingDescription}
+                  maxLength={100}
+                />
+
+                {/* Spending Preview */}
+                {spendingAmount && parseFloat(spendingAmount) > 0 && (
+                  <View style={[styles.spendingPreview, {
+                    backgroundColor: isDark ? 'rgba(45, 27, 61, 0.4)' : Colors.lightCream + '80',
+                    borderColor: Colors.glassBorder,
+                  }]}>
+                    <Ionicons
+                      name={parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? 'checkmark-circle' : 'warning'}
+                      size={18}
+                      color={parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? Colors.glowingGreen : Colors.sunKissedAmber}
+                    />
+                    <Text style={[styles.spendingPreviewText, {
+                      color: parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? Colors.glowingGreen : Colors.sunKissedAmber,
+                    }]}>
+                      {parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit
+                        ? `Still under budget \u2014 ${formatCurrency(currency, todayRemaining - parseFloat(spendingAmount))} left`
+                        : `Over budget by ${formatCurrency(currency, parseFloat(spendingAmount) + todayTotalSpent - todayEffectiveLimit)}`
+                      }
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+
+              {/* Submit Button */}
+              <PressableScale
+                onPress={handleLogSpending}
+                style={styles.saveButton}
+                scaleValue={0.97}
+                disabled={isSubmitting}
               >
-                <Text style={styles.saveButtonText}>Create Budget Item</Text>
-              </LinearGradient>
-            </PressableScale>
+                <LinearGradient
+                  colors={[Colors.electricTeal, Colors.glowingGreen]}
+                  style={styles.saveButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isSubmitting ? (
+                    <Text style={styles.saveButtonText}>Saving...</Text>
+                  ) : (
+                    <Text style={styles.saveButtonText}>Log Spending</Text>
+                  )}
+                </LinearGradient>
+              </PressableScale>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </LinearGradient>
   );
 }
 
+// =============================================================================
+// STYLES
+// =============================================================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 60,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: 120,
   },
   centerContainer: {
     flex: 1,
@@ -983,19 +1079,24 @@ const styles = StyleSheet.create({
     ...Typography.titleSmall,
   },
 
-  // Header
+  // ─── Header ────────────────────────────────────────────────────────────────
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Spacing.lg,
   },
+  headerLeft: {
+    flex: 1,
+  },
+  headerBrand: {
+    ...Typography.labelMedium,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: Spacing.xs,
+  },
   greeting: {
     ...Typography.headlineLarge,
-  },
-  subtitle: {
-    ...Typography.titleSmall,
-    marginTop: Spacing.xs,
   },
   notificationButton: {
     width: 48,
@@ -1004,11 +1105,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    ...Shadows.soft,
   },
   notificationBadge: {
     position: 'absolute',
@@ -1019,44 +1116,85 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
 
-  // Daily Spending Card
-  dailySpendingCard: {
+  // ─── Hero Card ─────────────────────────────────────────────────────────────
+  heroCard: {
     marginBottom: Spacing.md,
   },
-  dailySpendingHeader: {
+  heroContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: Spacing.md,
+    alignItems: 'center',
   },
-  dailySpendingLabel: {
-    ...Typography.titleMedium,
-    marginBottom: Spacing.xs,
+  heroLeft: {
+    flex: 1,
+    marginRight: Spacing.md,
   },
-  dailySpendingDate: {
+  heroLabel: {
     ...Typography.labelMedium,
-  },
-  dailySpendingAmounts: {
-    alignItems: 'flex-end',
-  },
-  dailySpendingValue: {
-    ...Typography.displaySmall,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
     marginBottom: Spacing.xs,
   },
+  heroAmount: {
+    fontSize: 40,
+    fontWeight: '800',
+    letterSpacing: -1.5,
+    lineHeight: 48,
+    marginBottom: Spacing.xs,
+  },
+  heroDate: {
+    ...Typography.labelMedium,
+    marginBottom: Spacing.sm,
+  },
+  heroRight: {
+    alignItems: 'center',
+  },
+  wellnessLabel: {
+    ...Typography.labelSmall,
+    marginTop: Spacing.xs,
+  },
+
+  // ─── Wellness Ring ─────────────────────────────────────────────────────────
+  wellnessScoreValue: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+  },
+  wellnessScoreLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.5)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // ─── Rollover Badge ────────────────────────────────────────────────────────
   rolloverBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    marginTop: 2,
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.sm,
+    alignSelf: 'flex-start',
   },
   rolloverText: {
     ...Typography.labelMedium,
   },
 
-  // Progress Bar with Neon Glow
+  // ─── Progress Bar ──────────────────────────────────────────────────────────
+  progressSection: {
+    marginTop: Spacing.lg,
+  },
+  progressLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  progressLabelText: {
+    ...Typography.labelSmall,
+  },
   progressBarContainer: {
     height: 12,
     borderRadius: 6,
@@ -1066,7 +1204,6 @@ const styles = StyleSheet.create({
   progressBarGlow: {
     height: '100%',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
     shadowRadius: 8,
     elevation: 6,
   },
@@ -1075,7 +1212,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
 
-  // Status
+  // ─── Status ────────────────────────────────────────────────────────────────
   dailyStatusContainer: {
     alignItems: 'flex-start',
   },
@@ -1088,7 +1225,98 @@ const styles = StyleSheet.create({
     ...Typography.titleSmall,
   },
 
-  // Metrics
+  // ─── Daily Win ─────────────────────────────────────────────────────────────
+  dailyWinCard: {
+    marginBottom: Spacing.md,
+  },
+  dailyWinGradient: {
+    borderRadius: BorderRadius.lg,
+    margin: -Spacing.lg,
+    padding: Spacing.lg,
+  },
+  dailyWinContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  dailyWinEmoji: {
+    fontSize: 28,
+  },
+  dailyWinTextContainer: {
+    flex: 1,
+  },
+  dailyWinTitle: {
+    ...Typography.titleMedium,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  dailyWinMessage: {
+    ...Typography.bodySmall,
+  },
+  dailyWinBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ─── Quick Log ─────────────────────────────────────────────────────────────
+  quickLogSection: {
+    marginBottom: Spacing.md,
+  },
+  quickLogRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  quickLogItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  quickLogIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  quickLogEmoji: {
+    fontSize: 26,
+  },
+  quickLogLabel: {
+    ...Typography.labelSmall,
+    textAlign: 'center',
+  },
+
+  // ─── Log Spending Button ───────────────────────────────────────────────────
+  logSpendingButton: {
+    borderRadius: BorderRadius.xl,
+    overflow: 'hidden',
+    marginBottom: Spacing.lg,
+    shadowColor: '#14B8A6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  logSpendingGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    gap: Spacing.sm,
+  },
+  logSpendingText: {
+    ...Typography.titleMedium,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // ─── Metrics Row ───────────────────────────────────────────────────────────
   metricsRow: {
     flexDirection: 'row',
     gap: Spacing.md,
@@ -1114,101 +1342,7 @@ const styles = StyleSheet.create({
     ...Typography.labelMedium,
   },
 
-  // Log Spending Button
-  logSpendingButton: {
-    borderRadius: BorderRadius.xl,
-    overflow: 'hidden',
-    marginBottom: Spacing.lg,
-    shadowColor: '#14B8A6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  logSpendingGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.md,
-    gap: Spacing.sm,
-  },
-  logSpendingText: {
-    ...Typography.titleMedium,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-
-  // Budget Section
-  budgetSection: {
-    marginBottom: Spacing.lg,
-  },
-  budgetSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  budgetHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#14B8A6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sectionTitle: {
-    ...Typography.headlineSmall,
-  },
-  budgetGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.md,
-  },
-  budgetCategoryCard: {
-    width: (width - Spacing.lg * 2 - Spacing.md) / 2,
-    alignItems: 'center',
-  },
-
-  // Quick Log
-  quickLogSection: {
-    marginBottom: Spacing.lg,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: Spacing.md,
-  },
-  quickAction: {
-    width: (width - Spacing.lg * 2 - Spacing.md * 3) / 4,
-    borderRadius: BorderRadius.lg,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-  },
-  quickActionGradient: {
-    padding: Spacing.md,
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  quickActionText: {
-    ...Typography.labelSmall,
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-
-  // Momentum Streak
+  // ─── Momentum Streak ──────────────────────────────────────────────────────
   momentumStreakCard: {
     marginBottom: Spacing.lg,
   },
@@ -1223,17 +1357,14 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     flex: 1,
   },
-  streakFireWrap: {
+  streakIconWrap: {
     width: 52,
     height: 52,
-    position: 'relative',
-  },
-  streakEmojiOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  streakEmojiLarge: {
+  streakEmoji: {
     fontSize: 28,
   },
   momentumStreakInfo: {
@@ -1280,11 +1411,130 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
 
-  // Shared Modal Styles
+  // ─── Tomorrow Forecast ─────────────────────────────────────────────────────
+  forecastCard: {
+    marginBottom: Spacing.lg,
+  },
+  forecastContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  forecastLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    flex: 1,
+  },
+  forecastIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  forecastInfo: {
+    flex: 1,
+  },
+  forecastTitle: {
+    ...Typography.titleMedium,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  forecastSubtitle: {
+    ...Typography.bodySmall,
+  },
+  forecastAmount: {
+    ...Typography.headlineSmall,
+    fontWeight: '700',
+    paddingLeft: Spacing.sm,
+  },
+
+  // ─── Transactions ──────────────────────────────────────────────────────────
+  transactionSection: {
+    marginBottom: Spacing.lg,
+  },
+  transactionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  sectionTitle: {
+    ...Typography.headlineSmall,
+  },
+  transactionCount: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+    minWidth: 28,
+    alignItems: 'center',
+  },
+  transactionCountText: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
+  },
+  transactionList: {
+    gap: Spacing.sm,
+  },
+  transactionCard: {
+    // No extra margin - gap handled by parent
+  },
+  transactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  transactionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: Spacing.md,
+  },
+  transactionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  transactionEmoji: {
+    fontSize: 20,
+  },
+  transactionDetails: {
+    flex: 1,
+  },
+  transactionName: {
+    ...Typography.titleSmall,
+    marginBottom: 2,
+  },
+  transactionMeta: {
+    ...Typography.labelSmall,
+  },
+  transactionRight: {
+    alignItems: 'flex-end',
+    gap: Spacing.xs,
+  },
+  transactionAmount: {
+    ...Typography.titleMedium,
+    fontWeight: '700',
+  },
+  deleteButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ─── Modal ─────────────────────────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    flex: 1,
   },
   modalContent: {
     borderTopLeftRadius: BorderRadius.xxl + 8,
@@ -1292,8 +1542,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderBottomWidth: 0,
     padding: Spacing.lg,
-    paddingBottom: Spacing.xxl,
-    maxHeight: '85%',
+    maxHeight: '90%',
   },
   modalHandle: {
     width: 40,
@@ -1313,7 +1562,7 @@ const styles = StyleSheet.create({
     ...Typography.headlineMedium,
   },
 
-  // Log Spending Modal
+  // ─── Log Status Card ───────────────────────────────────────────────────────
   logStatusCard: {
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
@@ -1344,6 +1593,63 @@ const styles = StyleSheet.create({
     ...Typography.titleLarge,
     fontWeight: '800',
   },
+
+  // ─── Amount Input ──────────────────────────────────────────────────────────
+  inputLabel: {
+    ...Typography.titleSmall,
+    marginBottom: Spacing.sm,
+  },
+  amountInputField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+  },
+  currencySymbol: {
+    ...Typography.headlineSmall,
+    fontWeight: '700',
+    marginRight: Spacing.sm,
+  },
+  amountInput: {
+    flex: 1,
+    ...Typography.headlineSmall,
+    fontWeight: '700',
+    paddingVertical: Spacing.md,
+  },
+
+  // ─── Category Grid ─────────────────────────────────────────────────────────
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.round,
+    borderWidth: 1.5,
+  },
+  categoryChipEmoji: {
+    fontSize: 16,
+  },
+  categoryChipLabel: {
+    ...Typography.labelMedium,
+  },
+
+  // ─── Description Input ─────────────────────────────────────────────────────
+  descriptionInput: {
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 14,
+    ...Typography.bodyLarge,
+  },
+
+  // ─── Spending Preview ──────────────────────────────────────────────────────
   spendingPreview: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1358,56 +1664,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Budget Modal Items
-  budgetInputRow: {
-    marginBottom: Spacing.lg,
-  },
-  budgetInputHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  budgetInputLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  budgetItemIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: BorderRadius.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteItemButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  budgetInputName: {
-    ...Typography.titleMedium,
-  },
-  budgetInputField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    paddingHorizontal: Spacing.md,
-  },
-  currencySymbol: {
-    ...Typography.headlineSmall,
-    fontWeight: '700',
-    marginRight: Spacing.sm,
-  },
-  budgetInput: {
-    flex: 1,
-    ...Typography.headlineSmall,
-    fontWeight: '700',
-    paddingVertical: Spacing.md,
-  },
+  // ─── Save Button ───────────────────────────────────────────────────────────
   saveButton: {
     marginTop: Spacing.lg,
     borderRadius: BorderRadius.xxl,
@@ -1426,81 +1683,5 @@ const styles = StyleSheet.create({
     ...Typography.titleLarge,
     fontWeight: '700',
     color: '#FFFFFF',
-  },
-
-  // Add Budget Item Modal
-  inputSection: {
-    marginBottom: Spacing.lg,
-  },
-  inputLabel: {
-    ...Typography.titleSmall,
-    marginBottom: Spacing.md,
-  },
-  textInput: {
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 14,
-    ...Typography.bodyLarge,
-  },
-  iconGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.md,
-  },
-  iconOption: {
-    width: 56,
-    height: 56,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  colorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.md,
-  },
-  colorOption: {
-    width: 56,
-    height: 56,
-    borderRadius: BorderRadius.lg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'transparent',
-  },
-  colorOptionSelected: {
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  previewSection: {
-    marginBottom: Spacing.md,
-  },
-  previewCard: {
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    padding: Spacing.lg,
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  previewIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: BorderRadius.xl,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  previewText: {
-    ...Typography.titleLarge,
-    fontWeight: '700',
-  },
-  previewAllocation: {
-    ...Typography.titleSmall,
-    marginTop: Spacing.sm,
   },
 });

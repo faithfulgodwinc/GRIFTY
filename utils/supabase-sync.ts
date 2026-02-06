@@ -23,6 +23,13 @@ async function retryOperation<T>(
   }
 }
 
+// Helper to get authenticated user ID
+async function getAuthUserId(): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('No authenticated user');
+  return user.id;
+}
+
 export const supabaseSync = {
   /**
    * Create or update user profile in Supabase with retry mechanism
@@ -35,17 +42,18 @@ export const supabaseSync = {
     savingsGoal?: number;
     dailyBudget?: number;
     blueprintComplete?: boolean;
+    totalSavings?: number;
   }) {
     try {
       const result = await retryOperation(async () => {
+        const userId = await getAuthUserId();
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('No authenticated user');
 
         const { data, error } = await supabase
           .from('user_profiles')
           .upsert({
-            id: user.id,
-            email: user.email,
+            id: userId,
+            email: user?.email,
             name: userData.name,
             avatar_url: userData.avatarUrl,
             currency: userData.currency,
@@ -78,13 +86,12 @@ export const supabaseSync = {
    */
   async getUserProfile() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
+      const userId = await getAuthUserId();
 
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', userId)
         .single();
 
       if (error) throw error;
@@ -98,26 +105,28 @@ export const supabaseSync = {
   /**
    * Sync financial data to Supabase with retry mechanism
    */
-  async syncFinancialData(financialData: FinancialData) {
+  async syncFinancialData(financialData: Partial<FinancialData>) {
     try {
       const result = await retryOperation(async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('No authenticated user');
+        const userId = await getAuthUserId();
+
+        const updateData: Record<string, unknown> = {
+          user_id: userId,
+          updated_at: new Date().toISOString(),
+        };
+        if (financialData.dailyWellnessScore !== undefined) updateData.daily_wellness_score = financialData.dailyWellnessScore;
+        if (financialData.monthlySavings !== undefined) updateData.monthly_savings = financialData.monthlySavings;
+        if (financialData.dailySpending !== undefined) updateData.daily_spending = financialData.dailySpending;
+        if (financialData.savingsGoal !== undefined) updateData.savings_goal = financialData.savingsGoal;
+        if (financialData.dailyBudget !== undefined) updateData.daily_budget = financialData.dailyBudget;
+        if (financialData.streakDays !== undefined) updateData.streak_days = financialData.streakDays;
+        if (financialData.monthlyIncome !== undefined) updateData.monthly_income = financialData.monthlyIncome;
+        if (financialData.currency !== undefined) updateData.currency = financialData.currency;
+        if (financialData.totalSavings !== undefined) updateData.total_savings = financialData.totalSavings;
 
         const { data, error } = await supabase
           .from('financial_data')
-          .upsert({
-            user_id: user.id,
-            daily_wellness_score: financialData.dailyWellnessScore,
-            monthly_savings: financialData.monthlySavings,
-            daily_spending: financialData.dailySpending,
-            savings_goal: financialData.savingsGoal,
-            daily_budget: financialData.dailyBudget,
-            streak_days: financialData.streakDays,
-            monthly_income: financialData.monthlyIncome,
-            currency: financialData.currency,
-            updated_at: new Date().toISOString(),
-          })
+          .upsert(updateData)
           .select()
           .single();
 
@@ -141,13 +150,12 @@ export const supabaseSync = {
    */
   async getFinancialData() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
+      const userId = await getAuthUserId();
 
       const { data, error } = await supabase
         .from('financial_data')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .single();
 
       if (error) throw error;
@@ -168,16 +176,15 @@ export const supabaseSync = {
     date?: string;
   }) {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
+      const userId = await getAuthUserId();
 
       const { data, error } = await supabase
         .from('expenses')
         .insert({
-          user_id: user.id,
+          user_id: userId,
           amount: expense.amount,
           category: expense.category,
-          description: expense.description,
+          description: expense.description || '',
           expense_date: expense.date || new Date().toISOString().split('T')[0],
         })
         .select()
@@ -196,14 +203,13 @@ export const supabaseSync = {
    */
   async getExpenses(limit?: number) {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
+      const userId = await getAuthUserId();
 
       let query = supabase
         .from('expenses')
         .select('*')
-        .eq('user_id', user.id)
-        .order('expense_date', { ascending: false });
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
       if (limit) {
         query = query.limit(limit);
@@ -212,9 +218,196 @@ export const supabaseSync = {
       const { data, error } = await query;
 
       if (error) throw error;
-      return { success: true, data };
+      return { success: true, data: data || [] };
     } catch (error) {
       console.error('Failed to get expenses:', error);
+      return { success: false, data: [], error };
+    }
+  },
+
+  /**
+   * Get today's expenses
+   */
+  async getTodayExpenses() {
+    try {
+      const userId = await getAuthUserId();
+      const today = new Date().toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('expense_date', today)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return { success: true, data: data || [] };
+    } catch (error) {
+      console.error('Failed to get today expenses:', error);
+      return { success: false, data: [], error };
+    }
+  },
+
+  /**
+   * Get this month's expenses
+   */
+  async getMonthExpenses() {
+    try {
+      const userId = await getAuthUserId();
+      const now = new Date();
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('expense_date', monthStart)
+        .lte('expense_date', monthEnd)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return { success: true, data: data || [] };
+    } catch (error) {
+      console.error('Failed to get month expenses:', error);
+      return { success: false, data: [], error };
+    }
+  },
+
+  /**
+   * Delete an expense
+   */
+  async deleteExpense(expenseId: string) {
+    try {
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', expenseId);
+
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to delete expense:', error);
+      return { success: false, error };
+    }
+  },
+
+  /**
+   * Add savings win
+   */
+  async addSavingsWin(win: {
+    title: string;
+    amount: number;
+    description?: string;
+    date?: string;
+  }) {
+    try {
+      const userId = await getAuthUserId();
+
+      const { data, error } = await supabase
+        .from('savings_wins')
+        .insert({
+          user_id: userId,
+          title: win.title,
+          amount: win.amount,
+          description: win.description || '',
+          win_date: win.date || new Date().toISOString().split('T')[0],
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update total savings in financial_data (fallback manual update)
+      try {
+        const { data: fd } = await supabase
+          .from('financial_data')
+          .select('total_savings, monthly_savings')
+          .eq('user_id', userId)
+          .single();
+
+        if (fd) {
+          await supabase
+            .from('financial_data')
+            .update({
+              total_savings: (fd.total_savings || 0) + win.amount,
+              monthly_savings: (fd.monthly_savings || 0) + win.amount,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('user_id', userId);
+        }
+      } catch (updateError) {
+        console.warn('Failed to update total savings:', updateError);
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('Failed to add savings win:', error);
+      return { success: false, error };
+    }
+  },
+
+  /**
+   * Get savings wins
+   */
+  async getSavingsWins(limit?: number) {
+    try {
+      const userId = await getAuthUserId();
+
+      let query = supabase
+        .from('savings_wins')
+        .select('*')
+        .eq('user_id', userId)
+        .order('win_date', { ascending: false });
+
+      if (limit) {
+        query = query.limit(limit);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return { success: true, data: data || [] };
+    } catch (error) {
+      console.error('Failed to get savings wins:', error);
+      return { success: false, data: [], error };
+    }
+  },
+
+  /**
+   * Update streak
+   */
+  async updateStreak(streakDays: number, dailySpending: number, dailyBudget: number) {
+    try {
+      const userId = await getAuthUserId();
+      const today = new Date().toISOString().split('T')[0];
+      const stayedOnBudget = dailySpending <= dailyBudget;
+
+      // Upsert streak entry for today
+      await supabase
+        .from('savings_streaks')
+        .upsert({
+          user_id: userId,
+          streak_date: today,
+          stayed_on_budget: stayedOnBudget,
+          daily_spending: dailySpending,
+          daily_budget: dailyBudget,
+        }, { onConflict: 'user_id,streak_date' })
+        .select();
+
+      // Update financial_data with current streak count
+      await supabase
+        .from('financial_data')
+        .update({
+          streak_days: streakDays,
+          last_streak_date: today,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to update streak:', error);
       return { success: false, error };
     }
   },
@@ -225,37 +418,35 @@ export const supabaseSync = {
   async initializeMilestones() {
     try {
       const result = await retryOperation(async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('No authenticated user');
+        const userId = await getAuthUserId();
 
         // Check if milestones already exist
         const { data: existingMilestones, error: checkError } = await supabase
           .from('milestones')
           .select('id')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .limit(1);
 
         if (checkError) throw checkError;
 
         // If milestones already exist, skip initialization
         if (existingMilestones && existingMilestones.length > 0) {
-          console.log('Milestones already initialized for user');
           return { alreadyExists: true };
         }
 
         const defaultMilestones = [
-          { title: 'First Steps', description: 'Created your account', icon: '👶', amount: 0, unlocked: true },
-          { title: 'Savings Started', description: 'Saved your first 100', icon: '🌱', amount: 100, unlocked: false },
-          { title: 'Budget Master', description: 'Stayed under budget for 7 days', icon: '🎯', amount: 0, unlocked: false },
-          { title: 'Debt Destroyer', description: 'Paid off a debt', icon: '💪', amount: 0, unlocked: false },
-          { title: 'Emergency Fund', description: 'Built 1000 emergency fund', icon: '🛡️', amount: 1000, unlocked: false },
-          { title: 'Investment Pro', description: 'Started investing for the future', icon: '📈', amount: 0, unlocked: false },
-          { title: 'Financial Freedom', description: 'Reached 10,000 savings', icon: '👑', amount: 10000, unlocked: false },
+          { title: 'First Steps', description: 'Created your account', icon: '👶', amount: 0, unlocked: true, sort_order: 1 },
+          { title: 'Savings Started', description: 'Saved your first 100', icon: '🌱', amount: 100, unlocked: false, sort_order: 2 },
+          { title: 'Budget Master', description: '7-day streak under budget', icon: '🎯', amount: 0, unlocked: false, sort_order: 3 },
+          { title: 'Debt Destroyer', description: 'Paid off a debt', icon: '💪', amount: 0, unlocked: false, sort_order: 4 },
+          { title: 'Emergency Fund', description: 'Built 1000 emergency fund', icon: '🛡️', amount: 1000, unlocked: false, sort_order: 5 },
+          { title: 'Investment Pro', description: 'Started investing for the future', icon: '📈', amount: 0, unlocked: false, sort_order: 6 },
+          { title: 'Financial Freedom', description: 'Reached 10,000 savings', icon: '👑', amount: 10000, unlocked: false, sort_order: 7 },
         ];
 
         const milestonesToInsert = defaultMilestones.map(m => ({
           ...m,
-          user_id: user.id,
+          user_id: userId,
           unlocked_at: m.unlocked ? new Date().toISOString() : null,
         }));
 
@@ -284,19 +475,115 @@ export const supabaseSync = {
    */
   async getMilestones() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
+      const userId = await getAuthUserId();
 
       const { data, error } = await supabase
         .from('milestones')
         .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true });
+        .eq('user_id', userId)
+        .order('sort_order', { ascending: true });
+
+      if (error) throw error;
+      return { success: true, data: data || [] };
+    } catch (error) {
+      console.error('Failed to get milestones:', error);
+      return { success: false, data: [], error };
+    }
+  },
+
+  /**
+   * Unlock a milestone
+   */
+  async unlockMilestone(milestoneId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('milestones')
+        .update({
+          unlocked: true,
+          unlocked_at: new Date().toISOString(),
+        })
+        .eq('id', milestoneId)
+        .select()
+        .single();
 
       if (error) throw error;
       return { success: true, data };
     } catch (error) {
-      console.error('Failed to get milestones:', error);
+      console.error('Failed to unlock milestone:', error);
+      return { success: false, error };
+    }
+  },
+
+  /**
+   * Check and unlock milestones based on user data
+   */
+  async checkAndUnlockMilestones(totalSavings: number, streakDays: number) {
+    try {
+      const userId = await getAuthUserId();
+
+      const { data: milestones, error } = await supabase
+        .from('milestones')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('unlocked', false);
+
+      if (error || !milestones) return { success: false, error };
+
+      const unlocked: string[] = [];
+
+      for (const milestone of milestones) {
+        let shouldUnlock = false;
+
+        if (milestone.title === 'Savings Started' && totalSavings >= 100) shouldUnlock = true;
+        if (milestone.title === 'Budget Master' && streakDays >= 7) shouldUnlock = true;
+        if (milestone.title === 'Emergency Fund' && totalSavings >= 1000) shouldUnlock = true;
+        if (milestone.title === 'Financial Freedom' && totalSavings >= 10000) shouldUnlock = true;
+
+        if (shouldUnlock) {
+          await supabase
+            .from('milestones')
+            .update({ unlocked: true, unlocked_at: new Date().toISOString() })
+            .eq('id', milestone.id);
+          unlocked.push(milestone.title);
+        }
+      }
+
+      return { success: true, unlocked };
+    } catch (error) {
+      console.error('Failed to check milestones:', error);
+      return { success: false, error };
+    }
+  },
+
+  /**
+   * Update financial data fields for total savings
+   */
+  async updateTotalSavings(amount: number) {
+    try {
+      const userId = await getAuthUserId();
+
+      const { data: fd } = await supabase
+        .from('financial_data')
+        .select('total_savings, monthly_savings')
+        .eq('user_id', userId)
+        .single();
+
+      const newTotalSavings = (fd?.total_savings || 0) + amount;
+      const newMonthlySavings = (fd?.monthly_savings || 0) + amount;
+
+      const { error } = await supabase
+        .from('financial_data')
+        .update({
+          total_savings: newTotalSavings,
+          monthly_savings: newMonthlySavings,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
+
+      if (error) throw error;
+      return { success: true, totalSavings: newTotalSavings, monthlySavings: newMonthlySavings };
+    } catch (error) {
+      console.error('Failed to update total savings:', error);
       return { success: false, error };
     }
   },

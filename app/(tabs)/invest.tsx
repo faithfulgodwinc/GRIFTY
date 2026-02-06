@@ -15,6 +15,8 @@ import { PressableScale } from '@/components/PressableScale';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useFinancialData } from '@/contexts/FinancialDataContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, {
   Path,
   Circle,
@@ -196,13 +198,24 @@ function PulsingDot({ color }: { color: string }) {
 export default function InvestScreen() {
   const [selectedVehicle, setSelectedVehicle] =
     useState<InvestmentVehicle | null>(null);
-  const [investmentAmount] = useState(1000);
   const [timeHorizon] = useState(10);
   const { theme } = useTheme();
+  const _insets = useSafeAreaInsets();
+  const {
+    profile,
+    financialData,
+    totalSavings,
+  } = useFinancialData();
 
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
   const Gradients = getGradients(isDark);
+
+  const currency = profile?.currency || financialData?.currency || '£';
+  const monthlySavings = financialData?.monthlySavings || 0;
+  const savingsGoal = financialData?.savingsGoal || profile?.savingsGoal || 0;
+  // Use real monthly savings or savings goal for investment projections
+  const investmentAmount = monthlySavings > 0 ? monthlySavings : savingsGoal > 0 ? savingsGoal : 500;
 
   const calculateProjectedReturn = (
     vehicle: InvestmentVehicle,
@@ -324,6 +337,34 @@ export default function InvestScreen() {
             />
           </PressableScale>
         </View>
+
+        {/* Your Savings Power Card */}
+        <GlassCard style={{ marginBottom: Spacing.lg, marginHorizontal: Spacing.lg }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View>
+              <Text style={[Typography.labelMedium, { color: Colors.tertiaryText, marginBottom: 4 }]}>
+                Your Investment Power
+              </Text>
+              <Text style={[Typography.headlineMedium, { color: Colors.electricTeal, fontWeight: '800' }]}>
+                {currency}{totalSavings.toFixed(0)}
+              </Text>
+              <Text style={[Typography.bodySmall, { color: Colors.secondaryText, marginTop: 2 }]}>
+                Total Savings
+              </Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[Typography.labelMedium, { color: Colors.tertiaryText, marginBottom: 4 }]}>
+                Monthly Goal
+              </Text>
+              <Text style={[Typography.titleLarge, { color: Colors.amethyst, fontWeight: '700' }]}>
+                {currency}{savingsGoal.toFixed(0)}
+              </Text>
+              <Text style={[Typography.bodySmall, { color: Colors.secondaryText, marginTop: 2 }]}>
+                per month
+              </Text>
+            </View>
+          </View>
+        </GlassCard>
 
         {/* Live Market Pulse */}
         <View style={styles.marketPulseSection}>
@@ -650,7 +691,7 @@ export default function InvestScreen() {
                             },
                           ]}
                         >
-                          £{vehicle.minInvestment}
+                          {currency}{vehicle.minInvestment}
                         </Text>
                       </View>
                     </View>
@@ -682,7 +723,7 @@ export default function InvestScreen() {
                               { color: Colors.tertiaryText },
                             ]}
                           >
-                            £{investmentAmount.toLocaleString()} over{' '}
+                            {currency}{investmentAmount.toLocaleString()} over{' '}
                             {timeHorizon} years
                           </Text>
                         </View>
@@ -811,7 +852,7 @@ export default function InvestScreen() {
                                 },
                               ]}
                             >
-                              £
+                              {currency}
                               {investmentAmount.toLocaleString()}
                             </Text>
                           </View>
@@ -846,7 +887,7 @@ export default function InvestScreen() {
                                 },
                               ]}
                             >
-                              £
+                              {currency}
                               {calculateProjectedReturn(
                                 vehicle,
                                 investmentAmount,
@@ -882,7 +923,7 @@ export default function InvestScreen() {
                               },
                             ]}
                           >
-                            Potential Return: £
+                            Potential Return: {currency}
                             {(
                               calculateProjectedReturn(
                                 vehicle,

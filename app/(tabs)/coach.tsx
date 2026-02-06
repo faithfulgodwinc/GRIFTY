@@ -22,6 +22,7 @@ import * as Haptics from 'expo-haptics';
 import { storage } from '@/utils/storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useFinancialData } from '@/contexts/FinancialDataContext';
 
 interface Message {
   id: string;
@@ -38,15 +39,15 @@ interface YouTubeVideo {
 }
 
 const QUICK_REPLIES = [
-  { id: '1', text: 'How to fix a leaky faucet?', icon: '🔧' },
-  { id: '2', text: 'DIY budget meal prep ideas', icon: '🥗' },
-  { id: '3', text: 'Home cleaning hacks', icon: '🧹' },
-  { id: '4', text: 'DIY natural beauty products', icon: '✨' },
+  { id: '1', text: 'How can I save more this week?', icon: '💰' },
+  { id: '2', text: 'Best budget meal ideas?', icon: '🥗' },
+  { id: '3', text: 'Analyze my spending', icon: '📊' },
+  { id: '4', text: 'Tips to boost my streak', icon: '🔥' },
 ];
 
 const INITIAL_MESSAGE: Message = {
   id: '0',
-  text: "Hello! I'm your DIY Expert Coach. Ask me how-to questions and I'll guide you step-by-step to save money by doing things yourself!",
+  text: "Hello! I'm your AI financial P.A. How can I help you save today?",
   isUser: false,
   timestamp: new Date(),
 };
@@ -105,6 +106,22 @@ export default function CoachScreen() {
   const Gradients = getGradients(isDark);
 
   const { generateText, isLoading } = useTextGeneration();
+  const {
+    profile,
+    financialData,
+    spendableToday,
+    dailyAllowance,
+    momentumStreak,
+    totalSavings,
+    wellnessScore,
+    todayExpenses,
+    monthlySpentSoFar,
+  } = useFinancialData();
+
+  const currency = profile?.currency || financialData?.currency || '£';
+  const monthlyIncome = financialData?.monthlyIncome || profile?.monthlyIncome || 0;
+  const savingsGoal = financialData?.savingsGoal || profile?.savingsGoal || 0;
+  const todaySpent = todayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
   // Avatar glow animation
   const avatarGlow = useRef(new Animated.Value(0.4)).current;
@@ -219,21 +236,36 @@ export default function CoachScreen() {
     setInputText('');
 
     try {
-      const response = await generateText(`You are a DIY Expert Coach helping busy mothers save money by doing things themselves.
-        The user asked: "${text.trim()}"
+      const systemContext = `You are Savvy Sidekick, a friendly AI financial personal assistant for busy moms. You speak in a warm, empowering tone.
 
-        Provide clear, step-by-step instructions in a warm, empowering tone.
-        Focus on:
-        - Simple, actionable steps (numbered if possible)
-        - Cost-saving benefits
-        - Time estimates
-        - Common mistakes to avoid
-        - Encouraging, "you can do this!" attitude
+Current user financial context:
+- Name: ${profile?.name || 'there'}
+- Monthly income: ${currency}${monthlyIncome.toFixed(0)}
+- Savings goal: ${currency}${savingsGoal.toFixed(0)}/month
+- Today's allowance: ${currency}${dailyAllowance.toFixed(2)}
+- Spent today: ${currency}${todaySpent.toFixed(2)}
+- Remaining today: ${currency}${spendableToday.toFixed(2)}
+- Current streak: ${momentumStreak} days under budget
+- Total savings: ${currency}${totalSavings.toFixed(2)}
+- Monthly spent so far: ${currency}${monthlySpentSoFar.toFixed(2)}
+- Wellness score: ${wellnessScore}/100
 
-        Keep responses concise but comprehensive (3-5 sentences with key steps).
-        If it's a how-to question, break it down into simple steps.
+${momentumStreak >= 5 ? `Amazing! They're on a ${momentumStreak}-day streak! Celebrate this achievement.` : ''}
+${wellnessScore >= 80 ? 'They have a great wellness score. Encourage them!' : wellnessScore < 50 ? 'Their wellness score needs improvement. Be supportive and provide actionable tips.' : ''}
 
-        Response:`);
+Guidelines:
+- Give personalized advice based on their REAL financial data above
+- Be concise (3-5 sentences max)
+- Focus on practical, actionable money-saving tips
+- Use their actual numbers when giving advice
+- Be encouraging and celebrate their wins
+- If asked to analyze spending, reference their real spending data`;
+
+      const response = await generateText(`${systemContext}
+
+The user asked: "${text.trim()}"
+
+Response:`);
 
       // Generate YouTube recommendations for DIY/how-to queries
       const isDIYQuery = /how to|diy|fix|make|create|repair|clean|build/i.test(text.trim());

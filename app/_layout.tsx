@@ -7,7 +7,7 @@ import { AuthProvider } from '@fastshot/auth';
 import { supabase, cleanupSupabaseListeners } from '@/lib/supabase';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ThemeProvider } from '@/contexts/ThemeContext';
-import { Platform } from 'react-native';
+import { FinancialDataProvider } from '@/contexts/FinancialDataContext';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync().catch((error) => {
@@ -21,7 +21,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      // Hide splash screen when fonts are loaded or if there's an error
       SplashScreen.hideAsync().catch((error) => {
         console.warn('Failed to hide splash screen:', error);
       });
@@ -50,16 +49,18 @@ export default function RootLayout() {
             afterLogin: '/(tabs)',
           }}
         >
-          <StatusBar style="auto" />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen name="setup" />
-            <Stack.Screen name="blueprint-setup" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="auth/callback" />
-          </Stack>
+          <FinancialDataProvider>
+            <StatusBar style="auto" />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="onboarding" />
+              <Stack.Screen name="setup" />
+              <Stack.Screen name="blueprint-setup" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="auth/callback" />
+            </Stack>
+          </FinancialDataProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

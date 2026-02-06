@@ -1,12 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
+  Dimensions,
   Modal,
+  TextInput,
   Alert,
+  Animated,
+  RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getThemeColors, getGradients } from '@/constants/Colors';
@@ -17,26 +22,59 @@ import { EmptyState } from '@/components/EmptyState';
 import { DashboardSkeleton } from '@/components/SkeletonLoader';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { storage } from '@/utils/storage';
-import { supabaseSync } from '@/utils/supabase-sync';
 import { useTheme } from '@/contexts/ThemeContext';
-import { router } from 'expo-router';
-import Svg, {
-  Path,
-  Defs,
-  LinearGradient as SvgGradient,
-  Stop,
-  Circle,
-} from 'react-native-svg';
+import { useFinancialData } from '@/contexts/FinancialDataContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 
-interface SavingsWin {
-  id: string;
-  date: string;
-  amount: number;
-  description: string;
-}
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const TIP_CARD_WIDTH = SCREEN_WIDTH * 0.72;
 
-// Accent color palettes for unique win card patterns
+// ─── Mom Tips Data ──────────────────────────────────────────────────────────
+const MOM_TIPS = [
+  {
+    id: '1',
+    emoji: '\uD83E\uDD66',
+    title: 'Meal Prep Sundays',
+    description: 'Prep meals for the week and save up to 40% on food costs. Batch cook and freeze!',
+    gradient: ['#10B981', '#2DD4BF'] as const,
+    iconBg: 'rgba(16, 185, 129, 0.15)',
+  },
+  {
+    id: '2',
+    emoji: '\uD83D\uDED2',
+    title: 'Smart Grocery Lists',
+    description: 'Always shop with a list. Families who plan meals save an average of \u00A350/week.',
+    gradient: ['#F59E0B', '#EF4444'] as const,
+    iconBg: 'rgba(245, 158, 11, 0.15)',
+  },
+  {
+    id: '3',
+    emoji: '\u2744\uFE0F',
+    title: 'Freeze Leftovers',
+    description: 'Freeze leftover portions instead of binning them. It adds up to hundreds saved per year.',
+    gradient: ['#3B82F6', '#6366F1'] as const,
+    iconBg: 'rgba(59, 130, 246, 0.15)',
+  },
+  {
+    id: '4',
+    emoji: '\uD83C\uDFF7\uFE0F',
+    title: 'Yellow Sticker Wins',
+    description: 'Hit the reduced aisle at closing time. Freeze bargains for future meals.',
+    gradient: ['#EC4899', '#A855F7'] as const,
+    iconBg: 'rgba(236, 72, 153, 0.15)',
+  },
+  {
+    id: '5',
+    emoji: '\uD83D\uDCB0',
+    title: 'Cashback Apps',
+    description: 'Use cashback apps on every shop. Small amounts compound into big savings over time.',
+    gradient: ['#A855F7', '#2DD4BF'] as const,
+    iconBg: 'rgba(168, 85, 247, 0.15)',
+  },
+];
+
+// ─── Win Accent Color Palettes ──────────────────────────────────────────────
 const WIN_ACCENTS = [
   { bg: 'rgba(16, 185, 129, 0.08)', border: 'rgba(16, 185, 129, 0.15)', icon: '#10B981' },
   { bg: 'rgba(45, 212, 191, 0.08)', border: 'rgba(45, 212, 191, 0.15)', icon: '#2DD4BF' },
@@ -46,76 +84,11 @@ const WIN_ACCENTS = [
   { bg: 'rgba(236, 72, 153, 0.06)', border: 'rgba(236, 72, 153, 0.12)', icon: '#EC4899' },
 ];
 
-// Decorative SVG patterns for each win card
-function WinPattern({ index, size = 48 }: { index: number; size?: number }) {
-  const patternType = index % 6;
-
-  switch (patternType) {
-    case 0:
-      // Concentric circles
-      return (
-        <Svg width={size} height={size} viewBox="0 0 48 48" style={styles.winPatternSvg}>
-          <Circle cx="24" cy="24" r="20" stroke="rgba(16, 185, 129, 0.1)" strokeWidth="1" fill="none" />
-          <Circle cx="24" cy="24" r="14" stroke="rgba(16, 185, 129, 0.08)" strokeWidth="1" fill="none" />
-          <Circle cx="24" cy="24" r="8" stroke="rgba(16, 185, 129, 0.06)" strokeWidth="1" fill="none" />
-        </Svg>
-      );
-    case 1:
-      // Diagonal lines
-      return (
-        <Svg width={size} height={size} viewBox="0 0 48 48" style={styles.winPatternSvg}>
-          <Path d="M0 48L48 0" stroke="rgba(45, 212, 191, 0.08)" strokeWidth="1" />
-          <Path d="M-12 48L36 0" stroke="rgba(45, 212, 191, 0.06)" strokeWidth="1" />
-          <Path d="M12 48L60 0" stroke="rgba(45, 212, 191, 0.06)" strokeWidth="1" />
-        </Svg>
-      );
-    case 2:
-      // Diamond shape
-      return (
-        <Svg width={size} height={size} viewBox="0 0 48 48" style={styles.winPatternSvg}>
-          <Path d="M24 4L44 24L24 44L4 24Z" stroke="rgba(168, 85, 247, 0.1)" strokeWidth="1" fill="none" />
-          <Path d="M24 12L36 24L24 36L12 24Z" stroke="rgba(168, 85, 247, 0.07)" strokeWidth="1" fill="none" />
-        </Svg>
-      );
-    case 3:
-      // Dot grid
-      return (
-        <Svg width={size} height={size} viewBox="0 0 48 48" style={styles.winPatternSvg}>
-          {[8, 20, 32, 44].map((cx) =>
-            [8, 20, 32, 44].map((cy) => (
-              <Circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1.5" fill="rgba(99, 102, 241, 0.12)" />
-            ))
-          )}
-        </Svg>
-      );
-    case 4:
-      // Wave pattern
-      return (
-        <Svg width={size} height={size} viewBox="0 0 48 48" style={styles.winPatternSvg}>
-          <Path d="M0 24C8 16 16 32 24 24C32 16 40 32 48 24" stroke="rgba(245, 158, 11, 0.1)" strokeWidth="1" fill="none" />
-          <Path d="M0 32C8 24 16 40 24 32C32 24 40 40 48 32" stroke="rgba(245, 158, 11, 0.07)" strokeWidth="1" fill="none" />
-        </Svg>
-      );
-    case 5:
-      // Cross-hatch
-      return (
-        <Svg width={size} height={size} viewBox="0 0 48 48" style={styles.winPatternSvg}>
-          <Path d="M0 16H48" stroke="rgba(236, 72, 153, 0.07)" strokeWidth="0.75" />
-          <Path d="M0 32H48" stroke="rgba(236, 72, 153, 0.07)" strokeWidth="0.75" />
-          <Path d="M16 0V48" stroke="rgba(236, 72, 153, 0.07)" strokeWidth="0.75" />
-          <Path d="M32 0V48" stroke="rgba(236, 72, 153, 0.07)" strokeWidth="0.75" />
-        </Svg>
-      );
-    default:
-      return null;
-  }
-}
-
-// SVG progress ring component
+// ─── SVG Progress Ring ──────────────────────────────────────────────────────
 function ProgressRing({
   progress,
-  size = 130,
-  strokeWidth = 10,
+  size = 140,
+  strokeWidth = 12,
   tealColor,
   greenColor,
   trackColor,
@@ -136,7 +109,7 @@ function ProgressRing({
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <Defs>
-        <SvgGradient id="progressGradient" x1="0" y1="0" x2="1" y2="1">
+        <SvgGradient id="savingsProgressGrad" x1="0" y1="0" x2="1" y2="1">
           <Stop offset="0%" stopColor={tealColor} />
           <Stop offset="100%" stopColor={greenColor} />
         </SvgGradient>
@@ -155,7 +128,7 @@ function ProgressRing({
         cx={center}
         cy={center}
         r={radius}
-        stroke="url(#progressGradient)"
+        stroke="url(#savingsProgressGrad)"
         strokeWidth={strokeWidth}
         fill="none"
         strokeDasharray={`${circumference} ${circumference}`}
@@ -167,7 +140,7 @@ function ProgressRing({
   );
 }
 
-// Sparkle / celebration decorations around the ring
+// ─── Sparkle Decorations ────────────────────────────────────────────────────
 function SparkleEffects({
   progress,
   tealColor,
@@ -177,17 +150,16 @@ function SparkleEffects({
   tealColor: string;
   amberColor: string;
 }) {
-  if (progress < 25) return null;
+  if (progress < 20) return null;
 
   const sparkleCount = progress >= 100 ? 6 : progress >= 75 ? 4 : progress >= 50 ? 3 : 2;
-
   const sparklePositions = [
-    { top: -4, right: 20 },
-    { top: 20, right: -6 },
-    { bottom: 10, right: -2 },
-    { bottom: -4, left: 24 },
-    { top: 8, left: -4 },
-    { bottom: 24, left: -6 },
+    { top: -4, right: 24 },
+    { top: 24, right: -6 },
+    { bottom: 12, right: -2 },
+    { bottom: -4, left: 28 },
+    { top: 10, left: -4 },
+    { bottom: 28, left: -6 },
   ];
 
   return (
@@ -203,7 +175,7 @@ function SparkleEffects({
               height: i % 2 === 0 ? 6 : 4,
               borderRadius: i % 2 === 0 ? 3 : 2,
               backgroundColor: i % 3 === 0 ? amberColor : tealColor,
-              opacity: 0.6 + (i * 0.05),
+              opacity: 0.6 + i * 0.05,
             },
           ]}
         />
@@ -212,137 +184,139 @@ function SparkleEffects({
   );
 }
 
-export default function SavingsScreen() {
-  const [showAddSavingsModal, setShowAddSavingsModal] = useState(false);
-  const [savingsAmount, setSavingsAmount] = useState('');
-  const [savingsDescription, setSavingsDescription] = useState('');
-  const [totalSavings, setTotalSavings] = useState(0);
-  const [savingsGoal, setSavingsGoal] = useState(0);
-  const [savingsWins, setSavingsWins] = useState<SavingsWin[]>([]);
-  const [currency, setCurrency] = useState('\u00A3');
-  const [isLoading, setIsLoading] = useState(true);
-  const { theme } = useTheme();
+// ─── Animated Fire Emoji ────────────────────────────────────────────────────
+function AnimatedFire({ streak }: { streak: number }) {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  useEffect(() => {
+    if (streak > 0) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.15, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    }
+  }, [streak, pulseAnim]);
+
+  return (
+    <Animated.Text style={[styles.fireEmoji, { transform: [{ scale: pulseAnim }] }]}>
+      {'\uD83D\uDD25'}
+    </Animated.Text>
+  );
+}
+
+// =============================================================================
+// SAVINGS HUB SCREEN
+// =============================================================================
+export default function SavingsScreen() {
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
   const Gradients = getGradients(isDark);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const {
+    profile,
+    financialData,
+    savingsWins,
+    totalSavings,
+    momentumStreak,
+    isLoading,
+    isRefreshing,
+    actions,
+  } = useFinancialData();
 
-  const loadData = async () => {
+  // ─── Local State ────────────────────────────────────────────────────────────
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [winTitle, setWinTitle] = useState('');
+  const [winAmount, setWinAmount] = useState('');
+  const [winDescription, setWinDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ─── Derived Values ─────────────────────────────────────────────────────────
+  const currency = profile?.currency || financialData?.currency || '\u00A3';
+  const savingsGoal = financialData?.savingsGoal || profile?.savingsGoal || 0;
+  const progressPercentage = savingsGoal > 0
+    ? Math.min((totalSavings / savingsGoal) * 100, 100)
+    : 0;
+  const ringTrackColor = isDark ? 'rgba(45, 27, 61, 0.6)' : 'rgba(0, 0, 0, 0.06)';
+
+  // ─── Formatters ─────────────────────────────────────────────────────────────
+  const formatCurrency = (amount: number, decimals = 2): string => {
+    return `${currency}${Math.abs(amount).toFixed(decimals)}`;
+  };
+
+  const formatCurrencyWhole = (amount: number): string => {
+    return `${currency}${Math.abs(amount).toFixed(0)}`;
+  };
+
+  const formatDate = (dateString: string): string => {
     try {
-      setIsLoading(true);
-      const [financialData, userData] = await Promise.all([
-        storage.getFinancialData(),
-        storage.getUserData(),
-      ]);
-
-      if (financialData) {
-        setTotalSavings(financialData.monthlySavings || 0);
-        setSavingsGoal(financialData.savingsGoal || 0);
-        setCurrency(financialData.currency || '\u00A3');
-      }
-
-      if (userData) {
-        setCurrency(userData.currency || '\u00A3');
-      }
-
-      // Load savings wins from storage (for now, mock data)
-      const mockWins: SavingsWin[] = [
-        {
-          id: '1',
-          date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          amount: 50,
-          description: 'Weekly meal prep savings',
-        },
-        {
-          id: '2',
-          date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-          amount: 120,
-          description: 'Cancelled unused subscriptions',
-        },
-        {
-          id: '3',
-          date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-          amount: 75,
-          description: 'Bulk shopping discounts',
-        },
-      ];
-      setSavingsWins(mockWins);
-    } catch (error) {
-      console.error('Failed to load savings data:', error);
-    } finally {
-      setIsLoading(false);
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return '';
     }
   };
 
-  const handleAddSavings = async () => {
-    if (!savingsAmount || parseFloat(savingsAmount) <= 0) {
+  // ─── Handlers ───────────────────────────────────────────────────────────────
+  const handleRefresh = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await actions.refreshAll();
+  }, [actions]);
+
+  const handleOpenAddModal = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setWinTitle('');
+    setWinAmount('');
+    setWinDescription('');
+    setShowAddModal(true);
+  }, []);
+
+  const handleAddSavingsWin = useCallback(async () => {
+    const amount = parseFloat(winAmount);
+    if (!winTitle.trim()) {
+      Alert.alert('Missing Title', 'Please enter a title for your savings win.');
+      return;
+    }
+    if (!amount || amount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid savings amount.');
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      const amount = parseFloat(savingsAmount);
-      const newWin: SavingsWin = {
-        id: Date.now().toString(),
-        date: new Date().toISOString(),
+      const success = await actions.addSavingsWin({
+        title: winTitle.trim(),
         amount,
-        description: savingsDescription || 'Savings added',
-      };
+        description: winDescription.trim() || undefined,
+      });
 
-      const newTotalSavings = totalSavings + amount;
-      setTotalSavings(newTotalSavings);
-      setSavingsWins([newWin, ...savingsWins]);
-
-      // Update financial data
-      const financialData = await storage.getFinancialData();
-      if (financialData) {
-        financialData.monthlySavings = newTotalSavings;
-        await storage.setFinancialData(financialData);
-
-        // Sync to Supabase (non-blocking)
-        supabaseSync.syncFinancialData(financialData).catch((err: any) =>
-          console.error('Failed to sync financial data:', err)
-        );
+      if (success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setShowAddModal(false);
+        setWinTitle('');
+        setWinAmount('');
+        setWinDescription('');
+      } else {
+        Alert.alert('Error', 'Failed to add savings win. Please try again.');
       }
-
-      setShowAddSavingsModal(false);
-      setSavingsAmount('');
-      setSavingsDescription('');
     } catch (error) {
-      console.error('Failed to add savings:', error);
-      Alert.alert('Error', 'Failed to add savings. Please try again.');
+      console.error('Failed to add savings win:', error);
+      Alert.alert('Error', 'Failed to add savings win. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-  };
+  }, [winTitle, winAmount, winDescription, actions]);
 
-  const calculateProgress = () => {
-    if (savingsGoal === 0) return 0;
-    return Math.min((totalSavings / savingsGoal) * 100, 100);
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const formatCurrency = (amount: number, decimals = 2) => {
-    return `${currency}${amount.toFixed(decimals)}`;
-  };
-
-  const formatCurrencyWhole = (amount: number) => {
-    return `${currency}${amount.toFixed(0)}`;
-  };
-
-  // Loading state
+  // ─── Loading State ──────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <LinearGradient colors={Gradients.background} style={styles.container}>
@@ -351,27 +325,36 @@ export default function SavingsScreen() {
     );
   }
 
-  const progressPercentage = calculateProgress();
-  const ringTrackColor = isDark ? 'rgba(45, 27, 61, 0.6)' : 'rgba(0, 0, 0, 0.06)';
-
+  // ─── Main Render ────────────────────────────────────────────────────────────
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + 120 },
+        ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.electricTeal}
+            progressBackgroundColor={Colors.cardBackground}
+          />
+        }
       >
-        {/* Header */}
+        {/* ════════ HEADER ════════ */}
         <View style={styles.header}>
           <View>
-            <Text style={[styles.title, { color: Colors.primaryText }]}>
+            <Text style={[styles.headerBrand, { color: Colors.electricTeal }]}>
               Savings Hub
             </Text>
-            <Text style={[styles.subtitle, { color: Colors.electricTeal }]}>
+            <Text style={[styles.headerTitle, { color: Colors.primaryText }]}>
               Build Your Wealth
             </Text>
           </View>
           <PressableScale
-            onPress={() => router.push('/(tabs)/profile')}
+            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
             style={[
               styles.settingsButton,
               {
@@ -380,11 +363,46 @@ export default function SavingsScreen() {
               },
             ]}
           >
-            <Ionicons name="settings-outline" size={24} color={Colors.electricTeal} />
+            <Ionicons name="wallet-outline" size={24} color={Colors.electricTeal} />
           </PressableScale>
         </View>
 
-        {/* Total Savings Card */}
+        {/* ════════ SCAN RECEIPT BANNER ════════ */}
+        <PressableScale
+          onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+          style={styles.receiptBanner}
+          scaleValue={0.97}
+        >
+          <LinearGradient
+            colors={isDark
+              ? ['#A855F7', '#EC4899', '#F59E0B'] as const
+              : ['#7C3AED', '#EC4899', '#F59E0B'] as const
+            }
+            style={styles.receiptBannerGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0.5 }}
+          >
+            <View style={styles.receiptBannerContent}>
+              <View style={styles.receiptBannerLeft}>
+                <View style={styles.receiptBannerIconBg}>
+                  <Ionicons name="scan-outline" size={28} color="#FFFFFF" />
+                </View>
+                <View style={styles.receiptBannerText}>
+                  <Text style={styles.receiptBannerTitle}>Scan Receipt for Savings</Text>
+                  <Text style={styles.receiptBannerSubtitle}>
+                    Track every penny you save
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={22} color="rgba(255,255,255,0.7)" />
+            </View>
+            {/* Decorative circles */}
+            <View style={styles.receiptBannerDecor1} />
+            <View style={styles.receiptBannerDecor2} />
+          </LinearGradient>
+        </PressableScale>
+
+        {/* ════════ TOTAL SAVINGS CARD ════════ */}
         <GlassCard style={styles.totalSavingsCard} animated delay={0}>
           <View style={styles.totalSavingsHeader}>
             <Text style={[styles.sectionLabel, { color: Colors.tertiaryText }]}>
@@ -392,12 +410,12 @@ export default function SavingsScreen() {
             </Text>
             <View
               style={[
-                styles.trendBadge,
+                styles.growthBadge,
                 { backgroundColor: Colors.glowingGreen + '20' },
               ]}
             >
               <Ionicons name="trending-up" size={14} color={Colors.glowingGreen} />
-              <Text style={[styles.trendText, { color: Colors.glowingGreen }]}>
+              <Text style={[styles.growthText, { color: Colors.glowingGreen }]}>
                 Growing
               </Text>
             </View>
@@ -406,96 +424,229 @@ export default function SavingsScreen() {
             {formatCurrency(totalSavings)}
           </Text>
           <Text style={[styles.totalSavingsSubtext, { color: Colors.tertiaryText }]}>
-            Keep up the great work!
+            {savingsGoal > 0
+              ? `${formatCurrencyWhole(Math.max(savingsGoal - totalSavings, 0))} to reach your goal`
+              : 'Keep up the great work!'}
           </Text>
         </GlassCard>
 
-        {/* Savings Goal Progress */}
-        <GlassCard style={styles.goalCard} animated delay={100}>
-          <View style={styles.goalHeader}>
+        {/* ════════ SAVINGS GOAL PROGRESS RING ════════ */}
+        {savingsGoal > 0 && (
+          <GlassCard style={styles.goalCard} animated delay={100}>
+            <View style={styles.goalHeader}>
+              <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>
+                Savings Goal
+              </Text>
+              <Text style={[styles.goalPercentage, { color: Colors.electricTeal }]}>
+                {progressPercentage.toFixed(0)}%
+              </Text>
+            </View>
+
+            <View style={styles.goalVisualization}>
+              {/* Progress Ring */}
+              <View style={styles.progressRingContainer}>
+                <SparkleEffects
+                  progress={progressPercentage}
+                  tealColor={Colors.electricTeal}
+                  amberColor={Colors.sunKissedAmber}
+                />
+                <ProgressRing
+                  progress={progressPercentage}
+                  size={140}
+                  strokeWidth={12}
+                  tealColor={Colors.electricTeal}
+                  greenColor={Colors.glowingGreen}
+                  trackColor={ringTrackColor}
+                />
+                <View style={styles.progressRingCenter}>
+                  <Text style={[styles.progressRingValue, { color: Colors.primaryText }]}>
+                    {formatCurrencyWhole(totalSavings)}
+                  </Text>
+                  <Text style={[styles.progressRingLabel, { color: Colors.tertiaryText }]}>
+                    saved
+                  </Text>
+                </View>
+              </View>
+
+              {/* Goal Details */}
+              <View style={styles.goalDetails}>
+                <View style={styles.goalDetailRow}>
+                  <Text style={[styles.goalDetailLabel, { color: Colors.tertiaryText }]}>
+                    Goal
+                  </Text>
+                  <Text style={[styles.goalDetailValue, { color: Colors.primaryText }]}>
+                    {formatCurrencyWhole(savingsGoal)}
+                  </Text>
+                </View>
+                <View style={styles.goalDetailRow}>
+                  <Text style={[styles.goalDetailLabel, { color: Colors.tertiaryText }]}>
+                    Remaining
+                  </Text>
+                  <Text style={[styles.goalDetailValue, { color: Colors.electricTeal }]}>
+                    {formatCurrencyWhole(Math.max(savingsGoal - totalSavings, 0))}
+                  </Text>
+                </View>
+                {progressPercentage >= 100 ? (
+                  <View style={styles.goalAchievedBanner}>
+                    <LinearGradient
+                      colors={[Colors.electricTeal, Colors.glowingGreen]}
+                      style={styles.goalAchievedGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <Ionicons name="trophy" size={18} color="#FFFFFF" />
+                      <Text style={styles.goalAchievedText}>Goal Achieved!</Text>
+                    </LinearGradient>
+                  </View>
+                ) : (
+                  <Text style={[styles.goalMotivation, { color: Colors.tertiaryText }]}>
+                    You&apos;re {progressPercentage.toFixed(0)}% of the way!
+                  </Text>
+                )}
+              </View>
+            </View>
+          </GlassCard>
+        )}
+
+        {/* ════════ MOM-TIP CAROUSEL ════════ */}
+        <View style={styles.tipsSection}>
+          <View style={styles.tipsSectionHeader}>
+            <View style={[
+              styles.tipsSectionIconBg,
+              { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.08)' },
+            ]}>
+              <Ionicons name="bulb" size={18} color={Colors.sunKissedAmber} />
+            </View>
             <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>
-              Savings Goal
-            </Text>
-            <Text style={[styles.goalPercentage, { color: Colors.electricTeal }]}>
-              {progressPercentage.toFixed(0)}%
+              Mom-Tips
             </Text>
           </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tipsCarousel}
+            decelerationRate="fast"
+            snapToInterval={TIP_CARD_WIDTH + Spacing.md}
+            snapToAlignment="start"
+          >
+            {MOM_TIPS.map((tip, index) => (
+              <PressableScale
+                key={tip.id}
+                onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                style={[styles.tipCard, { width: TIP_CARD_WIDTH }]}
+                scaleValue={0.97}
+              >
+                <View style={[
+                  styles.tipCardInner,
+                  {
+                    backgroundColor: Colors.cardBackground,
+                    borderColor: Colors.glassBorder,
+                  },
+                ]}>
+                  <LinearGradient
+                    colors={tip.gradient}
+                    style={styles.tipCardAccent}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  />
+                  <View style={styles.tipCardContent}>
+                    <View style={[styles.tipEmojiContainer, { backgroundColor: tip.iconBg }]}>
+                      <Text style={styles.tipEmoji}>{tip.emoji}</Text>
+                    </View>
+                    <Text
+                      style={[styles.tipTitle, { color: Colors.primaryText }]}
+                      numberOfLines={1}
+                    >
+                      {tip.title}
+                    </Text>
+                    <Text
+                      style={[styles.tipDescription, { color: Colors.tertiaryText }]}
+                      numberOfLines={3}
+                    >
+                      {tip.description}
+                    </Text>
+                  </View>
+                  {/* Decorative corner gradient */}
+                  <View style={styles.tipCardDecor}>
+                    <LinearGradient
+                      colors={[tip.gradient[0] + '15', 'transparent']}
+                      style={styles.tipCardDecorGradient}
+                    />
+                  </View>
+                </View>
+              </PressableScale>
+            ))}
+          </ScrollView>
+        </View>
 
-          {/* Progress Ring Visualization */}
-          <View style={styles.goalVisualization}>
-            <View style={styles.progressRingContainer}>
-              <SparkleEffects
-                progress={progressPercentage}
-                tealColor={Colors.electricTeal}
-                amberColor={Colors.sunKissedAmber}
-              />
-              <ProgressRing
-                progress={progressPercentage}
-                size={130}
-                strokeWidth={10}
-                tealColor={Colors.electricTeal}
-                greenColor={Colors.glowingGreen}
-                trackColor={ringTrackColor}
-              />
-              <View style={styles.progressRingCenter}>
-                <Text style={[styles.progressRingValue, { color: Colors.primaryText }]}>
-                  {formatCurrencyWhole(totalSavings)}
+        {/* ════════ SAVINGS STREAK ════════ */}
+        <GlassCard style={styles.streakCard} animated delay={200}>
+          <View style={styles.streakContent}>
+            <View style={styles.streakLeft}>
+              <View style={[
+                styles.streakIconWrap,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(245, 158, 11, 0.12)'
+                    : 'rgba(245, 158, 11, 0.08)',
+                },
+              ]}>
+                <AnimatedFire streak={momentumStreak} />
+              </View>
+              <View style={styles.streakInfo}>
+                <Text style={[styles.streakTitle, { color: Colors.primaryText }]}>
+                  {momentumStreak > 0
+                    ? `${momentumStreak}-Day Streak!`
+                    : 'Start Your Streak!'}
                 </Text>
-                <Text style={[styles.progressRingLabel, { color: Colors.tertiaryText }]}>
-                  saved
+                <Text style={[styles.streakSubtitle, { color: Colors.tertiaryText }]}>
+                  {momentumStreak > 0
+                    ? 'Consecutive days under budget'
+                    : 'Stay under budget to build momentum'}
                 </Text>
               </View>
             </View>
+            <View style={styles.streakRight}>
+              <Text style={[styles.streakValue, {
+                color: momentumStreak > 0
+                  ? (isDark ? Colors.sunKissedAmber : Colors.radiantMagenta)
+                  : Colors.tertiaryText,
+              }]}>
+                {momentumStreak}
+              </Text>
+              <Text style={[styles.streakLabel, { color: Colors.tertiaryText }]}>
+                {momentumStreak === 1 ? 'Day' : 'Days'}
+              </Text>
+            </View>
+          </View>
 
-            <View style={styles.goalDetails}>
-              <View style={styles.goalDetailRow}>
-                <Text style={[styles.goalDetailLabel, { color: Colors.tertiaryText }]}>
-                  Goal
-                </Text>
-                <Text style={[styles.goalDetailValue, { color: Colors.primaryText }]}>
-                  {formatCurrencyWhole(savingsGoal)}
-                </Text>
-              </View>
-              <View style={styles.goalDetailRow}>
-                <Text style={[styles.goalDetailLabel, { color: Colors.tertiaryText }]}>
-                  Remaining
-                </Text>
-                <Text style={[styles.goalDetailValue, { color: Colors.electricTeal }]}>
-                  {formatCurrencyWhole(Math.max(savingsGoal - totalSavings, 0))}
-                </Text>
-              </View>
-              {progressPercentage >= 100 ? (
-                <View style={styles.goalAchievedBanner}>
-                  <LinearGradient
-                    colors={[Colors.electricTeal, Colors.glowingGreen]}
-                    style={styles.goalAchievedGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                  >
-                    <Ionicons name="trophy" size={20} color="#FFFFFF" />
-                    <Text style={styles.goalAchievedText}>Goal Achieved!</Text>
-                  </LinearGradient>
-                </View>
-              ) : (
-                <Text style={[styles.goalMotivation, { color: Colors.tertiaryText }]}>
-                  You&apos;re {progressPercentage.toFixed(0)}% of the way there!
+          {/* Streak Progress Dots */}
+          {momentumStreak > 0 && (
+            <View style={[styles.streakDotsContainer, { borderTopColor: Colors.glassBorder }]}>
+              {Array.from({ length: Math.min(momentumStreak, 7) }).map((_, i) => (
+                <LinearGradient
+                  key={`streak-dot-${i}`}
+                  colors={['#FF6B35', '#F59E0B']}
+                  style={styles.streakDot}
+                />
+              ))}
+              {momentumStreak > 7 && (
+                <Text style={[styles.streakDotsMore, { color: Colors.sunKissedAmber }]}>
+                  +{momentumStreak - 7}
                 </Text>
               )}
             </View>
-          </View>
+          )}
         </GlassCard>
 
-        {/* Savings Wins History */}
+        {/* ════════ SAVINGS WINS HISTORY ════════ */}
         <View style={styles.winsSection}>
           <View style={styles.winsSectionHeader}>
             <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>
               Savings Wins
             </Text>
             <PressableScale
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                setShowAddSavingsModal(true);
-              }}
+              onPress={handleOpenAddModal}
               style={[styles.addWinButton, { backgroundColor: Colors.electricTeal }]}
             >
               <Ionicons name="add" size={20} color="#FFFFFF" />
@@ -503,17 +654,15 @@ export default function SavingsScreen() {
           </View>
 
           {savingsWins.length === 0 ? (
-            <GlassCard style={styles.emptyWinsCard} animated delay={200}>
+            <GlassCard style={styles.emptyWinsCard} animated delay={300}>
               <EmptyState
                 icon="trophy-outline"
                 iconColor={Colors.sunKissedAmber}
                 title="No savings wins yet"
                 description="Start tracking your savings achievements and watch your wealth grow!"
                 actionLabel="Add First Win"
-                onAction={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  setShowAddSavingsModal(true);
-                }}
+                onAction={handleOpenAddModal}
+                gradientColors={[Colors.electricTeal, Colors.glowingGreen]}
               />
             </GlassCard>
           ) : (
@@ -524,22 +673,16 @@ export default function SavingsScreen() {
                   key={win.id}
                   style={styles.winCard}
                   animated
-                  delay={200 + index * 80}
+                  delay={300 + index * 80}
                 >
                   <View style={styles.winCardInner}>
-                    {/* Subtle background pattern unique to each card */}
-                    <View style={styles.winPatternContainer}>
-                      <WinPattern index={index} size={48} />
-                    </View>
-
-                    {/* Subtle gradient overlay tint */}
+                    {/* Subtle overlay tint */}
                     <View
                       style={[
                         styles.winGradientOverlay,
                         { backgroundColor: accent.bg },
                       ]}
                     />
-
                     <View style={styles.winContent}>
                       <View
                         style={[
@@ -559,23 +702,24 @@ export default function SavingsScreen() {
                       </View>
                       <View style={styles.winDetails}>
                         <Text
-                          style={[
-                            styles.winDescription,
-                            { color: Colors.primaryText },
-                          ]}
+                          style={[styles.winTitle, { color: Colors.primaryText }]}
                           numberOfLines={1}
                         >
-                          {win.description}
+                          {win.title}
                         </Text>
-                        <Text
-                          style={[styles.winDate, { color: Colors.tertiaryText }]}
-                        >
-                          {formatDate(win.date)}
+                        {win.description ? (
+                          <Text
+                            style={[styles.winDescription, { color: Colors.secondaryText }]}
+                            numberOfLines={1}
+                          >
+                            {win.description}
+                          </Text>
+                        ) : null}
+                        <Text style={[styles.winDate, { color: Colors.tertiaryText }]}>
+                          {formatDate(win.winDate || win.createdAt)}
                         </Text>
                       </View>
-                      <Text
-                        style={[styles.winAmount, { color: Colors.glowingGreen }]}
-                      >
+                      <Text style={[styles.winAmount, { color: Colors.glowingGreen }]}>
                         +{formatCurrencyWhole(win.amount)}
                       </Text>
                     </View>
@@ -586,182 +730,236 @@ export default function SavingsScreen() {
           )}
         </View>
 
-        {/* Tips Card */}
-        <GlassCard style={styles.tipsCard} animated delay={500}>
-          <View style={styles.tipsHeader}>
-            <View
-              style={[
-                styles.tipsIconContainer,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(245, 158, 11, 0.12)'
-                    : 'rgba(245, 158, 11, 0.08)',
-                },
-              ]}
+        {/* ════════ ADD WIN CTA (bottom) ════════ */}
+        {savingsWins.length > 0 && (
+          <PressableScale
+            onPress={handleOpenAddModal}
+            style={styles.addWinCta}
+            scaleValue={0.96}
+          >
+            <LinearGradient
+              colors={isDark
+                ? [Colors.electricTeal, Colors.amethyst]
+                : [Colors.electricTeal, Colors.glowingGreen]
+              }
+              style={styles.addWinCtaGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
             >
-              <Ionicons name="bulb" size={22} color={Colors.sunKissedAmber} />
-            </View>
-            <Text style={[styles.tipsTitle, { color: Colors.primaryText }]}>
-              Savings Tip
-            </Text>
-          </View>
-          <Text style={[styles.tipsText, { color: Colors.tertiaryText }]}>
-            Automate your savings! Set aside a fixed amount each week before
-            spending on anything else. Even small amounts add up over time.
-          </Text>
-        </GlassCard>
+              <Ionicons name="add-circle-outline" size={22} color="#FFFFFF" />
+              <Text style={styles.addWinCtaText}>Add Savings Win</Text>
+            </LinearGradient>
+          </PressableScale>
+        )}
       </ScrollView>
 
-      {/* Add Savings Modal */}
+      {/* ════════ ADD SAVINGS WIN MODAL ════════ */}
       <Modal
-        visible={showAddSavingsModal}
+        visible={showAddModal}
         animationType="slide"
         transparent
-        onRequestClose={() => setShowAddSavingsModal(false)}
+        onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalOverlay}>
+            <PressableScale
+              onPress={() => setShowAddModal(false)}
+              style={styles.modalBackdrop}
+              haptic={false}
+            >
+              <View />
+            </PressableScale>
+            <View style={[
               styles.modalContent,
-              { backgroundColor: Colors.cardBackground },
-            ]}
-          >
-            {/* Handle bar */}
-            <View style={styles.modalHandleContainer}>
-              <View
-                style={[
-                  styles.modalHandle,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(255, 255, 255, 0.2)'
-                      : 'rgba(0, 0, 0, 0.15)',
-                  },
-                ]}
-              />
-            </View>
-
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>
-                Add Savings Win
-              </Text>
-              <PressableScale
-                onPress={() => setShowAddSavingsModal(false)}
-                scaleValue={0.9}
-              >
+              {
+                backgroundColor: isDark ? Colors.darkPurple : Colors.white,
+                borderColor: Colors.glassBorder,
+                paddingBottom: Math.max(insets.bottom, Spacing.lg),
+              },
+            ]}>
+              {/* Handle bar */}
+              <View style={styles.modalHandleContainer}>
                 <View
                   style={[
-                    styles.modalCloseButton,
+                    styles.modalHandle,
                     {
                       backgroundColor: isDark
-                        ? 'rgba(255, 255, 255, 0.08)'
-                        : 'rgba(0, 0, 0, 0.05)',
+                        ? 'rgba(255, 255, 255, 0.2)'
+                        : 'rgba(0, 0, 0, 0.15)',
+                    },
+                  ]}
+                />
+              </View>
+
+              {/* Header */}
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>
+                  Add Savings Win
+                </Text>
+                <PressableScale
+                  onPress={() => setShowAddModal(false)}
+                  scaleValue={0.9}
+                >
+                  <View
+                    style={[
+                      styles.modalCloseButton,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(255, 255, 255, 0.08)'
+                          : 'rgba(0, 0, 0, 0.05)',
+                      },
+                    ]}
+                  >
+                    <Ionicons name="close" size={22} color={Colors.primaryText} />
+                  </View>
+                </PressableScale>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {/* Title Input */}
+                <Text style={[styles.inputLabel, { color: Colors.tertiaryText }]}>
+                  Win Title
+                </Text>
+                <TextInput
+                  style={[
+                    styles.textInput,
+                    {
+                      backgroundColor: Colors.lightCream,
+                      borderColor: Colors.glassBorder,
+                      color: Colors.primaryText,
+                    },
+                  ]}
+                  placeholder="e.g., Meal prep savings"
+                  placeholderTextColor={Colors.mediumGray}
+                  value={winTitle}
+                  onChangeText={setWinTitle}
+                  maxLength={80}
+                  autoFocus
+                />
+
+                {/* Amount Input */}
+                <Text
+                  style={[
+                    styles.inputLabel,
+                    { color: Colors.tertiaryText, marginTop: Spacing.lg },
+                  ]}
+                >
+                  Amount Saved
+                </Text>
+                <View
+                  style={[
+                    styles.amountInputRow,
+                    {
+                      backgroundColor: Colors.lightCream,
+                      borderColor: Colors.glassBorder,
                     },
                   ]}
                 >
-                  <Ionicons name="close" size={22} color={Colors.primaryText} />
+                  <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>
+                    {currency}
+                  </Text>
+                  <TextInput
+                    style={[styles.amountInput, { color: Colors.primaryText }]}
+                    placeholder="0.00"
+                    placeholderTextColor={Colors.mediumGray}
+                    keyboardType="decimal-pad"
+                    value={winAmount}
+                    onChangeText={setWinAmount}
+                  />
                 </View>
+
+                {/* Description Input */}
+                <Text
+                  style={[
+                    styles.inputLabel,
+                    { color: Colors.tertiaryText, marginTop: Spacing.lg },
+                  ]}
+                >
+                  Description (optional)
+                </Text>
+                <TextInput
+                  style={[
+                    styles.textAreaInput,
+                    {
+                      backgroundColor: Colors.lightCream,
+                      borderColor: Colors.glassBorder,
+                      color: Colors.primaryText,
+                    },
+                  ]}
+                  placeholder={`e.g., Made lunches at home instead of buying out`}
+                  placeholderTextColor={Colors.mediumGray}
+                  value={winDescription}
+                  onChangeText={setWinDescription}
+                  multiline
+                  maxLength={200}
+                />
+              </ScrollView>
+
+              {/* Submit Button */}
+              <PressableScale
+                onPress={handleAddSavingsWin}
+                style={styles.submitButton}
+                scaleValue={0.97}
+                disabled={isSubmitting}
+              >
+                <LinearGradient
+                  colors={[Colors.electricTeal, Colors.glowingGreen]}
+                  style={styles.submitButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isSubmitting ? (
+                    <Text style={styles.submitButtonText}>Adding...</Text>
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="checkmark-circle-outline"
+                        size={22}
+                        color="#FFFFFF"
+                        style={{ marginRight: Spacing.sm }}
+                      />
+                      <Text style={styles.submitButtonText}>Add Savings Win</Text>
+                    </>
+                  )}
+                </LinearGradient>
               </PressableScale>
             </View>
-
-            <Text style={[styles.inputLabel, { color: Colors.tertiaryText }]}>
-              Amount Saved
-            </Text>
-            <View
-              style={[
-                styles.amountInput,
-                {
-                  backgroundColor: Colors.lightCream,
-                  borderColor: Colors.glassBorder,
-                },
-              ]}
-            >
-              <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>
-                {currency}
-              </Text>
-              <TextInput
-                style={[styles.input, { color: Colors.primaryText }]}
-                placeholder="0.00"
-                placeholderTextColor={Colors.mediumGray}
-                keyboardType="decimal-pad"
-                value={savingsAmount}
-                onChangeText={setSavingsAmount}
-              />
-            </View>
-
-            <Text
-              style={[
-                styles.inputLabel,
-                { color: Colors.tertiaryText, marginTop: Spacing.lg },
-              ]}
-            >
-              Description
-            </Text>
-            <TextInput
-              style={[
-                styles.textInput,
-                {
-                  backgroundColor: Colors.lightCream,
-                  borderColor: Colors.glassBorder,
-                  color: Colors.primaryText,
-                },
-              ]}
-              placeholder={`e.g., Meal prep saved ${currency}50 this week`}
-              placeholderTextColor={Colors.mediumGray}
-              value={savingsDescription}
-              onChangeText={setSavingsDescription}
-              multiline
-            />
-
-            <PressableScale
-              onPress={handleAddSavings}
-              style={styles.submitButton}
-              haptic
-            >
-              <LinearGradient
-                colors={[Colors.electricTeal, Colors.glowingGreen]}
-                style={styles.submitButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={22}
-                  color="#FFFFFF"
-                  style={{ marginRight: Spacing.sm }}
-                />
-                <Text style={styles.submitButtonText}>Add Savings Win</Text>
-              </LinearGradient>
-            </PressableScale>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </LinearGradient>
   );
 }
 
+// =============================================================================
+// STYLES
+// =============================================================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 60,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: 140,
   },
 
-  // Header
+  // ─── Header ─────────────────────────────────────────────────────────────────
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Spacing.lg,
   },
-  title: {
-    ...Typography.headlineLarge,
+  headerBrand: {
+    ...Typography.labelMedium,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: Spacing.xs,
   },
-  subtitle: {
-    ...Typography.titleSmall,
-    marginTop: Spacing.xs,
+  headerTitle: {
+    ...Typography.headlineLarge,
   },
   settingsButton: {
     width: 48,
@@ -777,7 +975,75 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
-  // Total Savings Card
+  // ─── Receipt Banner ─────────────────────────────────────────────────────────
+  receiptBanner: {
+    marginBottom: Spacing.lg,
+    borderRadius: BorderRadius.xl,
+    overflow: 'hidden',
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  receiptBannerGradient: {
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    overflow: 'hidden',
+  },
+  receiptBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 2,
+  },
+  receiptBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: Spacing.md,
+  },
+  receiptBannerIconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  receiptBannerText: {
+    flex: 1,
+  },
+  receiptBannerTitle: {
+    ...Typography.titleMedium,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  receiptBannerSubtitle: {
+    ...Typography.bodySmall,
+    color: 'rgba(255, 255, 255, 0.75)',
+  },
+  receiptBannerDecor1: {
+    position: 'absolute',
+    top: -20,
+    right: -20,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  receiptBannerDecor2: {
+    position: 'absolute',
+    bottom: -30,
+    left: -10,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+
+  // ─── Total Savings Card ─────────────────────────────────────────────────────
   totalSavingsCard: {
     marginBottom: Spacing.lg,
   },
@@ -790,7 +1056,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     ...Typography.titleMedium,
   },
-  trendBadge: {
+  growthBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
@@ -798,7 +1064,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.md,
   },
-  trendText: {
+  growthText: {
     ...Typography.labelMedium,
   },
   totalSavingsValue: {
@@ -809,7 +1075,7 @@ const styles = StyleSheet.create({
     ...Typography.bodyMedium,
   },
 
-  // Goal Card
+  // ─── Goal Card ──────────────────────────────────────────────────────────────
   goalCard: {
     marginBottom: Spacing.lg,
   },
@@ -830,8 +1096,8 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
   },
   progressRingContainer: {
-    width: 130,
-    height: 130,
+    width: 140,
+    height: 140,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -885,7 +1151,145 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
 
-  // Wins Section
+  // ─── Mom-Tips Carousel ──────────────────────────────────────────────────────
+  tipsSection: {
+    marginBottom: Spacing.lg,
+  },
+  tipsSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  tipsSectionIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tipsCarousel: {
+    paddingRight: Spacing.lg,
+    gap: Spacing.md,
+  },
+  tipCard: {
+    // width set inline
+  },
+  tipCardInner: {
+    borderRadius: BorderRadius.xl,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  tipCardAccent: {
+    height: 4,
+  },
+  tipCardContent: {
+    padding: Spacing.lg,
+  },
+  tipEmojiContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  tipEmoji: {
+    fontSize: 22,
+  },
+  tipTitle: {
+    ...Typography.titleMedium,
+    fontWeight: '700',
+    marginBottom: Spacing.xs,
+  },
+  tipDescription: {
+    ...Typography.bodySmall,
+    lineHeight: 18,
+  },
+  tipCardDecor: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 80,
+    height: 80,
+    overflow: 'hidden',
+  },
+  tipCardDecorGradient: {
+    width: 80,
+    height: 80,
+    borderTopLeftRadius: 80,
+  },
+
+  // ─── Savings Streak ─────────────────────────────────────────────────────────
+  streakCard: {
+    marginBottom: Spacing.lg,
+  },
+  streakContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  streakLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    flex: 1,
+  },
+  streakIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fireEmoji: {
+    fontSize: 28,
+  },
+  streakInfo: {
+    flex: 1,
+  },
+  streakTitle: {
+    ...Typography.titleMedium,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  streakSubtitle: {
+    ...Typography.bodySmall,
+  },
+  streakRight: {
+    alignItems: 'center',
+    paddingLeft: Spacing.md,
+  },
+  streakValue: {
+    fontSize: 36,
+    fontWeight: '800',
+    lineHeight: 40,
+    letterSpacing: -1,
+  },
+  streakLabel: {
+    ...Typography.labelSmall,
+    marginTop: 2,
+  },
+  streakDotsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+  },
+  streakDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  streakDotsMore: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
+    marginLeft: 2,
+  },
+
+  // ─── Savings Wins Section ───────────────────────────────────────────────────
   winsSection: {
     marginBottom: Spacing.lg,
   },
@@ -917,15 +1321,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
   },
-  winPatternContainer: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    opacity: 1,
-  },
-  winPatternSvg: {
-    // positioned by parent
-  },
   winGradientOverlay: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: BorderRadius.xl,
@@ -945,53 +1340,61 @@ const styles = StyleSheet.create({
   winDetails: {
     flex: 1,
   },
-  winDescription: {
+  winTitle: {
     ...Typography.titleMedium,
-    marginBottom: Spacing.xs,
+    marginBottom: 2,
+  },
+  winDescription: {
+    ...Typography.bodySmall,
+    marginBottom: 2,
   },
   winDate: {
-    ...Typography.bodySmall,
+    ...Typography.labelSmall,
   },
   winAmount: {
     ...Typography.headlineSmall,
   },
 
-  // Tips Card
-  tipsCard: {
+  // ─── Add Win CTA ────────────────────────────────────────────────────────────
+  addWinCta: {
+    borderRadius: BorderRadius.xxl,
+    overflow: 'hidden',
     marginBottom: Spacing.lg,
+    shadowColor: '#14B8A6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 8,
   },
-  tipsHeader: {
+  addWinCtaGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  tipsIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.round,
     justifyContent: 'center',
-    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    gap: Spacing.sm,
   },
-  tipsTitle: {
+  addWinCtaText: {
     ...Typography.titleMedium,
-  },
-  tipsText: {
-    ...Typography.bodyMedium,
-    lineHeight: 22,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 
-  // Modal
+  // ─── Modal ──────────────────────────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
+  modalBackdrop: {
+    flex: 1,
+  },
   modalContent: {
     borderTopLeftRadius: BorderRadius.xxl + 8,
     borderTopRightRadius: BorderRadius.xxl + 8,
+    borderWidth: 1,
+    borderBottomWidth: 0,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+    maxHeight: '85%',
   },
   modalHandleContainer: {
     alignItems: 'center',
@@ -1020,11 +1423,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // ─── Form Inputs ────────────────────────────────────────────────────────────
   inputLabel: {
     ...Typography.titleSmall,
     marginBottom: Spacing.sm,
   },
-  amountInput: {
+  textInput: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    ...Typography.bodyLarge,
+  },
+  amountInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: BorderRadius.lg,
@@ -1036,13 +1448,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginRight: Spacing.sm,
   },
-  input: {
+  amountInput: {
     flex: 1,
     fontSize: 28,
     fontWeight: '700',
     paddingVertical: Spacing.md,
   },
-  textInput: {
+  textAreaInput: {
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
     paddingHorizontal: Spacing.lg,
@@ -1051,6 +1463,8 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: 'top',
   },
+
+  // ─── Submit Button ──────────────────────────────────────────────────────────
   submitButton: {
     marginTop: Spacing.lg,
     borderRadius: BorderRadius.xxl,
