@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { GlassCard } from '@/components/GlassCard';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { storage } from '@/utils/storage';
+import { supabaseSync } from '@/utils/supabase-sync';
 
 const { width } = Dimensions.get('window');
 
@@ -31,7 +32,31 @@ export default function SavingsScreen() {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('groceries');
-  const [streakDays, setStreakDays] = useState(12);
+  const [streakDays, setStreakDays] = useState(0);
+  const [currency, setCurrency] = useState('£');
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const [financialData, userData] = await Promise.all([
+        storage.getFinancialData(),
+        storage.getUserData()
+      ]);
+
+      if (financialData && financialData.streakDays !== undefined) {
+        setStreakDays(financialData.streakDays);
+      }
+
+      if (userData && userData.currency) {
+        setCurrency(userData.currency);
+      }
+    } catch (error) {
+      console.error('Failed to load user data:', error);
+    }
+  };
 
   const categories = [
     { id: 'groceries', label: 'Groceries', color: Colors.radiantMagenta, icon: 'cart' },
@@ -46,30 +71,49 @@ export default function SavingsScreen() {
       return;
     }
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    const expenses = await storage.getExpenses();
-    const newExpense = {
-      id: Date.now().toString(),
-      amount: parseFloat(amount),
-      category: selectedCategory,
-      description,
-      date: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    };
+      const expenses = await storage.getExpenses();
+      const newExpense = {
+        id: Date.now().toString(),
+        amount: parseFloat(amount),
+        category: selectedCategory,
+        description,
+        date: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      };
 
-    await storage.setExpenses([...expenses, newExpense]);
+      // Save locally
+      await storage.setExpenses([...expenses, newExpense]);
 
-    // Update financial data
-    const financialData = await storage.getFinancialData();
-    if (financialData) {
-      financialData.dailySpending += parseFloat(amount);
-      await storage.setFinancialData(financialData);
+      // Update financial data locally
+      const financialData = await storage.getFinancialData();
+      if (financialData) {
+        financialData.dailySpending += parseFloat(amount);
+        await storage.setFinancialData(financialData);
+
+        // Sync to Supabase (non-blocking)
+        supabaseSync.syncFinancialData(financialData).catch(err =>
+          console.error('Failed to sync financial data:', err)
+        );
+      }
+
+      // Sync expense to Supabase (non-blocking)
+      supabaseSync.addExpense({
+        amount: parseFloat(amount),
+        category: selectedCategory,
+        description,
+        date: new Date().toISOString().split('T')[0],
+      }).catch(err => console.error('Failed to sync expense:', err));
+
+      setShowExpenseModal(false);
+      setAmount('');
+      setDescription('');
+    } catch (error) {
+      console.error('Failed to add expense:', error);
+      Alert.alert('Error', 'Failed to add expense. Please try again.');
     }
-
-    setShowExpenseModal(false);
-    setAmount('');
-    setDescription('');
   };
 
   return (
@@ -191,7 +235,7 @@ export default function SavingsScreen() {
 
             <Text style={styles.inputLabel}>Amount</Text>
             <View style={styles.amountInput}>
-              <Text style={styles.currencySymbol}>£</Text>
+              <Text style={styles.currencySymbol}>{currency}</Text>
               <TextInput
                 style={styles.input}
                 placeholder="0.00"

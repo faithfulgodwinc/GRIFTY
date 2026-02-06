@@ -79,11 +79,17 @@ export default function HomeScreen() {
     );
   }
 
-  const savingsProgress = (financialData.monthlySavings / financialData.savingsGoal) * 100;
-  const spendingProgress = (financialData.dailySpending / financialData.dailyBudget) * 100;
+  const savingsProgress = financialData.savingsGoal > 0
+    ? (financialData.monthlySavings / financialData.savingsGoal) * 100
+    : 0;
+  const spendingProgress = financialData.dailyBudget > 0
+    ? (financialData.dailySpending / financialData.dailyBudget) * 100
+    : 0;
 
-  // Calculate dynamic wellness score
-  const budgetPerformance = Math.max(0, 100 - (spendingProgress - 100));
+  // Calculate dynamic wellness score (100 for new users with no spending)
+  const budgetPerformance = financialData.dailySpending === 0
+    ? 100
+    : Math.max(0, 100 - (spendingProgress - 100));
   const savingsPerformance = Math.min(100, savingsProgress);
   const wellnessScore = Math.round((budgetPerformance * 0.6) + (savingsPerformance * 0.4));
 

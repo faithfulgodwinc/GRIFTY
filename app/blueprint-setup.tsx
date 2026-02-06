@@ -31,6 +31,7 @@ const CURRENCIES: Currency[] = [
   { code: 'EUR', symbol: '€', name: 'Euro', flag: '🇪🇺' },
   { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar', flag: '🇨🇦' },
   { code: 'AUD', symbol: 'A$', name: 'Australian Dollar', flag: '🇦🇺' },
+  { code: 'NGN', symbol: '₦', name: 'Naira', flag: '🇳🇬' },
   { code: 'INR', symbol: '₹', name: 'Indian Rupee', flag: '🇮🇳' },
   { code: 'JPY', symbol: '¥', name: 'Japanese Yen', flag: '🇯🇵' },
   { code: 'CNY', symbol: '¥', name: 'Chinese Yuan', flag: '🇨🇳' },
@@ -139,17 +140,42 @@ export default function BlueprintSetupScreen() {
         currency: selectedCurrency.symbol,
       };
 
-      // Save locally
+      // Save locally first
       await storage.setUserData(userData);
       await storage.setFinancialData(financialData);
       await storage.setExpenses([]);
       await storage.setStreaks({ lastUpdated: new Date().toISOString(), count: 0 });
       await storage.setBlueprintComplete(true);
 
-      // Sync to Supabase (non-blocking)
-      supabaseSync.syncUserProfile(userData).catch(console.error);
-      supabaseSync.syncFinancialData(financialData).catch(console.error);
-      supabaseSync.initializeMilestones().catch(console.error);
+      // Attempt to sync to Supabase with proper error handling
+      const syncResults = await Promise.allSettled([
+        supabaseSync.syncUserProfile(userData),
+        supabaseSync.syncFinancialData(financialData),
+        supabaseSync.initializeMilestones(),
+      ]);
+
+      // Check for sync failures
+      const failedSyncs = syncResults
+        .map((result, index) => {
+          if (result.status === 'fulfilled' && !result.value.success) {
+            const syncNames = ['user profile', 'financial data', 'milestones'];
+            return syncNames[index];
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      // If any syncs failed, log warning but continue (data is saved locally)
+      if (failedSyncs.length > 0) {
+        console.warn('Some data failed to sync:', failedSyncs);
+        // Optional: Show a subtle warning to user
+        Alert.alert(
+          'Sync Notice',
+          `Your data is saved locally. Some data (${failedSyncs.join(', ')}) will sync when connection improves.`,
+          [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+        );
+        return;
+      }
 
       // Navigate to main app
       router.replace('/(tabs)');
