@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   FINANCIAL_DATA: '@grit_financial_data',
   MILESTONES: '@grit_milestones',
   ONBOARDING_COMPLETE: '@grit_onboarding_complete',
+  BLUEPRINT_COMPLETE: '@grit_blueprint_complete',
   CHAT_HISTORY: '@grit_chat_history',
   STREAKS: '@grit_streaks',
 } as const;
@@ -184,6 +185,26 @@ export const storage = {
       return true;
     } catch (error) {
       console.error(`Failed to remove item ${key}:`, error);
+      return false;
+    }
+  },
+
+  async setBlueprintComplete(complete: boolean): Promise<boolean> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.BLUEPRINT_COMPLETE, JSON.stringify(complete));
+      return true;
+    } catch (error) {
+      console.error('Failed to save blueprint status:', error);
+      return false;
+    }
+  },
+
+  async getBlueprintComplete(): Promise<boolean> {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.BLUEPRINT_COMPLETE);
+      return safeJsonParse(data, false);
+    } catch (error) {
+      console.error('Failed to get blueprint status:', error);
       return false;
     }
   },

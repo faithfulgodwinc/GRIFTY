@@ -85,12 +85,22 @@ export default function ProfileScreen() {
         <GlassCard style={styles.profileCard}>
           <View style={styles.profileHeader}>
             <View style={styles.avatarLarge}>
-              <LinearGradient
-                colors={Gradients.hero}
-                style={styles.avatarGradient}
-              >
-                <Text style={styles.avatarText}>MOM</Text>
-              </LinearGradient>
+              {userData?.avatarUrl && userData.avatarUrl.startsWith('http') ? (
+                <LinearGradient
+                  colors={Gradients.hero}
+                  style={styles.avatarGradient}
+                >
+                  <Text style={styles.avatarText}>
+                    {userData?.name?.charAt(0) || 'M'}
+                  </Text>
+                </LinearGradient>
+              ) : (
+                <View style={styles.emojiAvatarContainer}>
+                  <Text style={styles.emojiAvatar}>
+                    {userData?.avatarUrl || '👩'}
+                  </Text>
+                </View>
+              )}
             </View>
             <View style={styles.profileInfo}>
               <Text style={styles.userName}>{userData?.name || 'Super Mom'}</Text>
@@ -108,7 +118,7 @@ export default function ProfileScreen() {
             <View style={styles.statDivider} />
             <View style={styles.stat}>
               <Text style={styles.statValue}>
-                £{financialData?.monthlySavings || 0}
+                {financialData?.currency || '£'}{financialData?.monthlySavings || 0}
               </Text>
               <Text style={styles.statLabel}>Saved</Text>
             </View>
@@ -339,6 +349,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: Colors.white,
+  },
+  emojiAvatarContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.lightCream,
+    borderRadius: 40,
+  },
+  emojiAvatar: {
+    fontSize: 48,
   },
   profileInfo: {
     flex: 1,

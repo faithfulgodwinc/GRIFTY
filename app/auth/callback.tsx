@@ -8,6 +8,18 @@ import { Colors, Gradients } from '@/constants/Colors';
 export default function Callback() {
   const router = useRouter();
 
+  const handleSuccess = async () => {
+    // Check if user has completed blueprint setup
+    const { storage } = await import('@/utils/storage');
+    const blueprintComplete = await storage.getBlueprintComplete();
+
+    if (blueprintComplete) {
+      router.replace('/(tabs)');
+    } else {
+      router.replace('/blueprint-setup');
+    }
+  };
+
   return (
     <LinearGradient colors={Gradients.hero} style={styles.container}>
       <View style={styles.loading}>
@@ -15,7 +27,7 @@ export default function Callback() {
       </View>
       <AuthCallbackPage
         supabaseClient={supabase}
-        onSuccess={() => router.replace('/(tabs)')}
+        onSuccess={handleSuccess}
         onError={(error) =>
           router.replace(`/(auth)/login?error=${encodeURIComponent(error.message)}`)
         }

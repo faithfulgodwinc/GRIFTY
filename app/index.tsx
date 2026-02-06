@@ -9,20 +9,23 @@ import { useAuth } from '@fastshot/auth';
 export default function Index() {
   const [loading, setLoading] = useState(true);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [blueprintComplete, setBlueprintComplete] = useState(false);
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
     if (!authLoading) {
-      checkOnboardingStatus();
+      checkStatus();
     }
   }, [authLoading]);
 
-  const checkOnboardingStatus = async () => {
+  const checkStatus = async () => {
     try {
-      const complete = await storage.getOnboardingComplete();
-      setOnboardingComplete(complete);
+      const onboarding = await storage.getOnboardingComplete();
+      const blueprint = await storage.getBlueprintComplete();
+      setOnboardingComplete(onboarding);
+      setBlueprintComplete(blueprint);
     } catch (error) {
-      console.error('Error checking onboarding status:', error);
+      console.error('Error checking status:', error);
     } finally {
       setLoading(false);
     }
@@ -44,7 +47,12 @@ export default function Index() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  // If authenticated, go directly to tabs
+  // If authenticated but blueprint not complete, go to blueprint setup
+  if (!blueprintComplete) {
+    return <Redirect href="/blueprint-setup" />;
+  }
+
+  // If authenticated and blueprint complete, go to tabs
   return <Redirect href="/(tabs)" />;
 }
 

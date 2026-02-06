@@ -2,10 +2,13 @@ export interface User {
   id: string;
   email: string;
   name?: string;
+  avatarUrl?: string;
+  currency?: string; // Symbol like $, £, €, etc.
   monthlyIncome?: number;
   savingsGoal?: number;
   dailyBudget?: number;
   onboardingComplete: boolean;
+  blueprintComplete: boolean;
 }
 
 export interface Expense {
@@ -27,6 +30,15 @@ export interface FinancialData {
   savingsGoal: number;
   dailyBudget: number;
   streakDays: number;
+  monthlyIncome: number;
+  currency: string;
+}
+
+export interface Currency {
+  code: string;
+  symbol: string;
+  name: string;
+  flag: string;
 }
 
 export interface Milestone {

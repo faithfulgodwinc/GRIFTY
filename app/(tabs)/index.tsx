@@ -21,36 +21,30 @@ const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const [financialData, setFinancialData] = useState<FinancialData | null>(null);
+  const [userData, setUserData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadFinancialData();
+    loadData();
   }, []);
 
-  const loadFinancialData = async () => {
+  const loadData = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await storage.getFinancialData();
+      const financial = await storage.getFinancialData();
+      const user = await storage.getUserData();
 
-      // If no data exists, initialize with default values
-      if (!data) {
-        const defaultData: FinancialData = {
-          dailySpending: 35,
-          dailyBudget: 50,
-          monthlySavings: 420,
-          savingsGoal: 1000,
-          dailyWellnessScore: 92,
-          streakDays: 0,
-        };
-        await storage.setFinancialData(defaultData);
-        setFinancialData(defaultData);
-      } else {
-        setFinancialData(data);
+      if (!financial || !user) {
+        setError('Please complete your financial blueprint setup.');
+        return;
       }
+
+      setFinancialData(financial);
+      setUserData(user);
     } catch (error) {
-      console.error('Failed to load financial data:', error);
+      console.error('Failed to load data:', error);
       setError('Unable to load your data. Please try again.');
     } finally {
       setIsLoading(false);
@@ -76,7 +70,7 @@ export default function HomeScreen() {
           <Text style={styles.errorText}>{error || 'Unable to load data'}</Text>
           <TouchableOpacity
             style={styles.retryButton}
-            onPress={loadFinancialData}
+            onPress={loadData}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
@@ -88,14 +82,28 @@ export default function HomeScreen() {
   const savingsProgress = (financialData.monthlySavings / financialData.savingsGoal) * 100;
   const spendingProgress = (financialData.dailySpending / financialData.dailyBudget) * 100;
 
+  // Calculate dynamic wellness score
+  const budgetPerformance = Math.max(0, 100 - (spendingProgress - 100));
+  const savingsPerformance = Math.min(100, savingsProgress);
+  const wellnessScore = Math.round((budgetPerformance * 0.6) + (savingsPerformance * 0.4));
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 18) return 'Good Afternoon';
+    return 'Good Evening';
+  };
+
+  const currency = financialData?.currency || '£';
+
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good Morning! 👋</Text>
-            <Text style={styles.subtitle}>Mom-Boss Edition</Text>
+            <Text style={styles.greeting}>{getGreeting()}! 👋</Text>
+            <Text style={styles.subtitle}>{userData?.name || 'Super Mom'}</Text>
           </View>
           <TouchableOpacity
             style={styles.notificationButton}
@@ -162,7 +170,7 @@ export default function HomeScreen() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Text style={styles.wellnessValue}>{financialData.dailyWellnessScore}</Text>
+                <Text style={styles.wellnessValue}>{wellnessScore}</Text>
                 <Text style={styles.wellnessMax}>/100</Text>
               </LinearGradient>
             </View>
@@ -232,7 +240,7 @@ export default function HomeScreen() {
               <Text style={styles.statTitle}>Burn Rate 🔥</Text>
             </View>
             <View style={styles.burnRateCircle}>
-              <Text style={styles.burnRateValue}>£{financialData.dailySpending.toFixed(0)}</Text>
+              <Text style={styles.burnRateValue}>{currency}{(financialData.dailyBudget - financialData.dailySpending).toFixed(0)}</Text>
               <Text style={styles.burnRateLabel}>Remaining</Text>
             </View>
           </GlassCard>
@@ -242,8 +250,17 @@ export default function HomeScreen() {
               <Text style={styles.statTitle}>Daily Win</Text>
             </View>
             <View style={styles.dailyWinContent}>
-              <Text style={styles.dailyWinEmoji}>🎉</Text>
-              <Text style={styles.dailyWinText}>Stayed under{'\n'}budget!</Text>
+              {financialData.dailySpending <= financialData.dailyBudget ? (
+                <>
+                  <Text style={styles.dailyWinEmoji}>🎉</Text>
+                  <Text style={styles.dailyWinText}>Stayed under{'\n'}budget!</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.dailyWinEmoji}>💪</Text>
+                  <Text style={styles.dailyWinText}>Tomorrow is{'\n'}a new day!</Text>
+                </>
+              )}
             </View>
           </GlassCard>
         </View>
