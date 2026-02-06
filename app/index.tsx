@@ -4,14 +4,18 @@ import { Redirect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Gradients } from '@/constants/Colors';
 import { storage } from '@/utils/storage';
+import { useAuth } from '@fastshot/auth';
 
 export default function Index() {
   const [loading, setLoading] = useState(true);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
-    checkOnboardingStatus();
-  }, []);
+    if (!authLoading) {
+      checkOnboardingStatus();
+    }
+  }, [authLoading]);
 
   const checkOnboardingStatus = async () => {
     try {
@@ -24,7 +28,7 @@ export default function Index() {
     }
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <LinearGradient colors={Gradients.hero} style={styles.container}>
         <ActivityIndicator size="large" color={Colors.white} />
@@ -32,10 +36,15 @@ export default function Index() {
     );
   }
 
-  if (!onboardingComplete) {
-    return <Redirect href="/onboarding" />;
+  // If not authenticated, go to onboarding then auth
+  if (!isAuthenticated) {
+    if (!onboardingComplete) {
+      return <Redirect href="/onboarding" />;
+    }
+    return <Redirect href="/(auth)/login" />;
   }
 
+  // If authenticated, go directly to tabs
   return <Redirect href="/(tabs)" />;
 }
 

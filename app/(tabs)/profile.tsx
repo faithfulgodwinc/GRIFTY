@@ -12,6 +12,7 @@ import { Colors, Gradients } from '@/constants/Colors';
 import { GlassCard } from '@/components/GlassCard';
 import { Ionicons } from '@expo/vector-icons';
 import { storage } from '@/utils/storage';
+import { useAuth } from '@fastshot/auth';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path, Circle, Line } from 'react-native-svg';
 
@@ -38,6 +39,7 @@ const MILESTONES: Milestone[] = [
 export default function ProfileScreen() {
   const [userData, setUserData] = useState<any>(null);
   const [financialData, setFinancialData] = useState<any>(null);
+  const { signOut, user } = useAuth();
 
   useEffect(() => {
     loadData();
@@ -91,8 +93,8 @@ export default function ProfileScreen() {
               </LinearGradient>
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.userName}>Super Mom</Text>
-              <Text style={styles.userEmail}>mom@grit.app</Text>
+              <Text style={styles.userName}>{userData?.name || 'Super Mom'}</Text>
+              <Text style={styles.userEmail}>{user?.email || 'mom@grit.app'}</Text>
             </View>
           </View>
 
@@ -250,7 +252,13 @@ export default function ProfileScreen() {
 
             <View style={styles.settingDivider} />
 
-            <TouchableOpacity style={styles.settingItem}>
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                signOut();
+              }}
+            >
               <View style={styles.settingLeft}>
                 <Ionicons name="log-out-outline" size={24} color={Colors.radiantMagenta} />
                 <Text style={[styles.settingText, { color: Colors.radiantMagenta }]}>

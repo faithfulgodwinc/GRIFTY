@@ -1,5 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
+import { ProtectedLayout } from '@fastshot/auth';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,8 +14,9 @@ export default function TabLayout() {
   const totalHeight = tabBarHeight + bottomPadding;
 
   return (
-    <Tabs
-      screenOptions={{
+    <ProtectedLayout redirectTo="/(auth)/login">
+      <Tabs
+        screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: Colors.electricTeal,
         tabBarInactiveTintColor: Colors.mediumGray,
@@ -83,6 +85,7 @@ export default function TabLayout() {
           ),
         }}
       />
-    </Tabs>
+      </Tabs>
+    </ProtectedLayout>
   );
 }

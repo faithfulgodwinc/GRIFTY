@@ -55,7 +55,7 @@ export default function OnboardingScreen() {
   const handleComplete = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await storage.setOnboardingComplete(true);
-    router.replace('/setup');
+    router.replace('/(auth)/signup');
   };
 
   const viewableItemsChanged = useRef(({ viewableItems }: any) => {
