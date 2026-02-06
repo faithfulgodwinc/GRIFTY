@@ -96,6 +96,10 @@ export default function CoachScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
 
+  // Match tab bar height calculation from _layout.tsx
+  const bottomPadding = Math.max(insets.bottom, 20);
+  const tabBarTotalHeight = 72 + bottomPadding;
+
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
   const Gradients = getGradients(isDark);
@@ -387,7 +391,11 @@ export default function CoachScreen() {
         {/* Messages */}
         <ScrollView
           ref={scrollViewRef}
-          contentContainerStyle={styles.scrollContent}
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: (isDark ? tabBarTotalHeight : 0) + 80 },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -716,7 +724,7 @@ export default function CoachScreen() {
         )}
 
         {/* Floating Premium Input Bar */}
-        <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 90 }]}>
+        <View style={[styles.inputContainer, { paddingBottom: isDark ? tabBarTotalHeight : 0 }]}>
           <View
             style={[
               styles.inputWrapper,
@@ -832,10 +840,12 @@ const styles = StyleSheet.create({
   },
 
   // ── Messages ScrollView ─────────────────────────────────────────────────
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.lg,
-    paddingBottom: 140,
     flexGrow: 1,
   },
 
