@@ -66,7 +66,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <LinearGradient colors={[Colors.background, Colors.darkPurple]} style={styles.container}>
+    <LinearGradient colors={Gradients.background} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -75,7 +75,7 @@ export default function ProfileScreen() {
             <Text style={styles.subtitle}>Legacy Map</Text>
           </View>
           <TouchableOpacity style={styles.settingsButton}>
-            <Ionicons name="settings-outline" size={24} color={Colors.white} />
+            <Ionicons name="settings-outline" size={24} color={Colors.primaryText} />
           </TouchableOpacity>
         </View>
 
@@ -283,22 +283,28 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   subtitle: {
     fontSize: 14,
     color: Colors.electricTeal,
     marginTop: 4,
+    fontWeight: '600',
   },
   settingsButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.white,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.glassBorder,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   profileCard: {
     marginBottom: 20,
@@ -332,12 +338,13 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
     marginBottom: 4,
   },
   userEmail: {
     fontSize: 14,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
+    fontWeight: '500',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -357,7 +364,8 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 12,
-    color: Colors.mediumGray,
+    color: Colors.tertiaryText,
+    fontWeight: '500',
   },
   statDivider: {
     width: 1,
@@ -388,12 +396,13 @@ const styles = StyleSheet.create({
   streakTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
     marginBottom: 4,
   },
   streakDescription: {
     fontSize: 14,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
+    fontWeight: '500',
   },
   streakProgress: {
     marginTop: 8,
@@ -410,8 +419,9 @@ const styles = StyleSheet.create({
   },
   streakTarget: {
     fontSize: 12,
-    color: Colors.mediumGray,
+    color: Colors.tertiaryText,
     textAlign: 'right',
+    fontWeight: '500',
   },
   journeySection: {
     marginBottom: 30,
@@ -419,13 +429,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
     marginBottom: 8,
   },
   sectionSubtitle: {
     fontSize: 14,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
     marginBottom: 24,
+    fontWeight: '500',
   },
   journeyMap: {
     paddingVertical: 20,
@@ -450,7 +461,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: 'hidden',
     borderWidth: 3,
-    borderColor: Colors.darkGray,
+    borderColor: Colors.lightGray,
   },
   milestoneUnlocked: {
     borderColor: Colors.electricTeal,
@@ -464,7 +475,7 @@ const styles = StyleSheet.create({
   milestoneLocked: {
     width: '100%',
     height: '100%',
-    backgroundColor: Colors.darkGray,
+    backgroundColor: Colors.lightCream,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -474,7 +485,7 @@ const styles = StyleSheet.create({
   milestoneLine: {
     width: 3,
     height: 40,
-    backgroundColor: Colors.darkGray,
+    backgroundColor: Colors.lightGray,
     marginTop: 8,
   },
   milestoneCard: {
@@ -483,13 +494,14 @@ const styles = StyleSheet.create({
   milestoneTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
     marginBottom: 6,
   },
   milestoneDescription: {
     fontSize: 14,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
     lineHeight: 20,
+    fontWeight: '500',
   },
   unlockedBadge: {
     flexDirection: 'row',
@@ -518,7 +530,8 @@ const styles = StyleSheet.create({
   },
   settingText: {
     fontSize: 16,
-    color: Colors.white,
+    color: Colors.primaryText,
+    fontWeight: '500',
   },
   settingDivider: {
     height: 1,

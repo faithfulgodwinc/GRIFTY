@@ -32,7 +32,7 @@ export default function HomeScreen() {
 
   if (!financialData) {
     return (
-      <LinearGradient colors={[Colors.background, Colors.darkPurple]} style={styles.container}>
+      <LinearGradient colors={Gradients.background} style={styles.container}>
         <Text style={styles.loadingText}>Loading...</Text>
       </LinearGradient>
     );
@@ -42,7 +42,7 @@ export default function HomeScreen() {
   const spendingProgress = (financialData.dailySpending / financialData.dailyBudget) * 100;
 
   return (
-    <LinearGradient colors={[Colors.background, Colors.darkPurple]} style={styles.container}>
+    <LinearGradient colors={Gradients.background} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -54,7 +54,7 @@ export default function HomeScreen() {
             style={styles.notificationButton}
             onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
           >
-            <Ionicons name="notifications-outline" size={24} color={Colors.white} />
+            <Ionicons name="notifications-outline" size={24} color={Colors.primaryText} />
             <View style={styles.notificationBadge} />
           </TouchableOpacity>
         </View>
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
   },
   loadingText: {
-    color: Colors.white,
+    color: Colors.primaryText,
     fontSize: 18,
     textAlign: 'center',
     marginTop: 100,
@@ -229,22 +229,28 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   subtitle: {
     fontSize: 14,
     color: Colors.electricTeal,
     marginTop: 4,
+    fontWeight: '600',
   },
   notificationButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.white,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.glassBorder,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   notificationBadge: {
     position: 'absolute',
@@ -294,7 +300,8 @@ const styles = StyleSheet.create({
   },
   ringLabelText: {
     fontSize: 14,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
+    fontWeight: '500',
   },
   wellnessScoreContainer: {
     alignItems: 'center',
@@ -302,8 +309,9 @@ const styles = StyleSheet.create({
   },
   wellnessLabel: {
     fontSize: 14,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
     marginBottom: 8,
+    fontWeight: '600',
   },
   wellnessScore: {
     flexDirection: 'row',
@@ -326,7 +334,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
     marginBottom: 16,
   },
   quickActions: {
@@ -369,7 +377,7 @@ const styles = StyleSheet.create({
   statTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   burnRateCircle: {
     alignItems: 'center',
@@ -382,8 +390,9 @@ const styles = StyleSheet.create({
   },
   burnRateLabel: {
     fontSize: 12,
-    color: Colors.lightGray,
+    color: Colors.tertiaryText,
     marginTop: 4,
+    fontWeight: '500',
   },
   dailyWinContent: {
     alignItems: 'center',
@@ -395,8 +404,9 @@ const styles = StyleSheet.create({
   },
   dailyWinText: {
     fontSize: 12,
-    color: Colors.lightGray,
+    color: Colors.tertiaryText,
     textAlign: 'center',
     lineHeight: 16,
+    fontWeight: '500',
   },
 });

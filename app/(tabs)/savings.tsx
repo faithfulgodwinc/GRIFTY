@@ -73,12 +73,12 @@ export default function SavingsScreen() {
   };
 
   return (
-    <LinearGradient colors={[Colors.background, Colors.darkPurple]} style={styles.container}>
+    <LinearGradient colors={Gradients.background} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => {}}>
-            <Ionicons name="arrow-back" size={24} color={Colors.white} />
+            <Ionicons name="arrow-back" size={24} color={Colors.primaryText} />
           </TouchableOpacity>
           <Text style={styles.title}>Savings Hub</Text>
           <View style={{ width: 24 }} />
@@ -185,7 +185,7 @@ export default function SavingsScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Log Expense</Text>
               <TouchableOpacity onPress={() => setShowExpenseModal(false)}>
-                <Ionicons name="close" size={28} color={Colors.white} />
+                <Ionicons name="close" size={28} color={Colors.primaryText} />
               </TouchableOpacity>
             </View>
 
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   scannerCard: {
     marginBottom: 30,
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   seeAllText: {
     fontSize: 14,
@@ -354,13 +354,14 @@ const styles = StyleSheet.create({
   hackTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.white,
+    color: Colors.primaryText,
     textAlign: 'center',
     marginBottom: 4,
   },
   hackCategory: {
     fontSize: 12,
     color: Colors.electricTeal,
+    fontWeight: '600',
   },
   streakCard: {
     marginBottom: 30,
@@ -387,12 +388,13 @@ const styles = StyleSheet.create({
   streakValue: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   streakDescription: {
     fontSize: 14,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
     lineHeight: 20,
+    fontWeight: '500',
   },
   addButton: {
     borderRadius: 24,
@@ -417,11 +419,11 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.white,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     padding: 24,
@@ -436,19 +438,19 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.white,
+    color: Colors.primaryText,
     marginBottom: 12,
     marginTop: 16,
   },
   amountInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.lightCream,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.glassBorder,
@@ -464,7 +466,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
     paddingVertical: 16,
   },
   categoriesGrid: {
@@ -476,7 +478,7 @@ const styles = StyleSheet.create({
     width: (width - 84) / 2,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.lightCream,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.glassBorder,
@@ -487,6 +489,7 @@ const styles = StyleSheet.create({
   categoryButtonActive: {
     borderColor: Colors.electricTeal,
     borderWidth: 2,
+    backgroundColor: Colors.white,
   },
   categoryLabel: {
     fontSize: 14,
@@ -494,14 +497,14 @@ const styles = StyleSheet.create({
     color: Colors.mediumGray,
   },
   textInput: {
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.lightCream,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.glassBorder,
     paddingHorizontal: 20,
     paddingVertical: 16,
     fontSize: 16,
-    color: Colors.white,
+    color: Colors.primaryText,
     minHeight: 80,
     textAlignVertical: 'top',
   },

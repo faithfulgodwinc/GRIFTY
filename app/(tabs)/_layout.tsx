@@ -15,16 +15,22 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors.electricTeal,
         tabBarInactiveTintColor: Colors.mediumGray,
         tabBarStyle: {
-          backgroundColor: Colors.darkPurple,
+          backgroundColor: Colors.white,
           borderTopColor: Colors.glassBorder,
           borderTopWidth: 1,
-          paddingBottom: Platform.OS === 'ios' ? insets.bottom : 10,
-          height: Platform.OS === 'ios' ? 80 + insets.bottom : 70,
-          paddingTop: 10,
+          paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 16,
+          height: Platform.OS === 'ios' ? 70 + Math.max(insets.bottom, 20) : 70,
+          paddingTop: 12,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          elevation: 8,
         },
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '600',
+          marginBottom: 4,
         },
       }}
     >

@@ -41,10 +41,10 @@ export function FinancialRing({ value, maxValue, color, size, strokeWidth }: Fin
         cx={size / 2}
         cy={size / 2}
         r={radius}
-        stroke={Colors.darkGray}
+        stroke={Colors.lightGray}
         strokeWidth={strokeWidth}
         fill="none"
-        opacity={0.3}
+        opacity={0.2}
       />
       {/* Progress circle */}
       <AnimatedCircle

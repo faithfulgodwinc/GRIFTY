@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { Colors } from '@/constants/Colors';
 
 interface GlassCardProps {
@@ -9,14 +8,12 @@ interface GlassCardProps {
   intensity?: number;
 }
 
-export function GlassCard({ children, style, intensity = 20 }: GlassCardProps) {
+export function GlassCard({ children, style }: GlassCardProps) {
   return (
     <View style={[styles.container, style]}>
-      <BlurView intensity={intensity} style={styles.blur}>
-        <View style={styles.content}>
-          {children}
-        </View>
-      </BlurView>
+      <View style={styles.content}>
+        {children}
+      </View>
     </View>
   );
 }
@@ -24,12 +21,14 @@ export function GlassCard({ children, style, intensity = 20 }: GlassCardProps) {
 const styles = StyleSheet.create({
   container: {
     borderRadius: 24,
-    overflow: 'hidden',
+    backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: Colors.glassBorder,
-  },
-  blur: {
-    backgroundColor: Colors.cardBackground,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
   },
   content: {
     padding: 20,

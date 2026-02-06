@@ -68,12 +68,12 @@ export default function InvestScreen() {
   };
 
   return (
-    <LinearGradient colors={[Colors.background, Colors.darkPurple]} style={styles.container}>
+    <LinearGradient colors={Gradients.background} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Future Fund Simulator</Text>
-          <Text style={styles.subtitle}>Plan your kids' financial future</Text>
+          <Text style={styles.subtitle}>Plan your kids&apos; financial future</Text>
         </View>
 
         {/* Investment Chart */}
@@ -276,12 +276,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
+    fontWeight: '500',
   },
   chartCard: {
     marginBottom: 20,
@@ -289,7 +290,7 @@ const styles = StyleSheet.create({
   chartTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.white,
+    color: Colors.primaryText,
     marginBottom: 20,
   },
   chartContainer: {
@@ -301,8 +302,9 @@ const styles = StyleSheet.create({
   },
   projectionLabel: {
     fontSize: 14,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
     marginBottom: 12,
+    fontWeight: '600',
   },
   projectionValue: {
     paddingHorizontal: 32,
@@ -332,7 +334,7 @@ const styles = StyleSheet.create({
   controlLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   valueContainer: {
     backgroundColor: Colors.electricTeal,
@@ -356,7 +358,8 @@ const styles = StyleSheet.create({
   },
   sliderLabel: {
     fontSize: 12,
-    color: Colors.mediumGray,
+    color: Colors.tertiaryText,
+    fontWeight: '500',
   },
   riskCard: {
     marginBottom: 20,
@@ -368,7 +371,7 @@ const styles = StyleSheet.create({
   riskButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.lightCream,
     borderRadius: 16,
     borderWidth: 2,
     borderColor: Colors.glassBorder,
@@ -386,12 +389,13 @@ const styles = StyleSheet.create({
   riskLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.mediumGray,
+    color: Colors.secondaryText,
     marginBottom: 4,
   },
   riskReturn: {
     fontSize: 12,
-    color: Colors.lightGray,
+    color: Colors.tertiaryText,
+    fontWeight: '500',
   },
   infoCard: {
     marginBottom: 20,
@@ -405,13 +409,14 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   infoText: {
     fontSize: 14,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
     lineHeight: 20,
     marginBottom: 16,
+    fontWeight: '500',
   },
   infoStats: {
     flexDirection: 'row',
@@ -431,6 +436,7 @@ const styles = StyleSheet.create({
   },
   infoStatLabel: {
     fontSize: 12,
-    color: Colors.mediumGray,
+    color: Colors.tertiaryText,
+    fontWeight: '500',
   },
 });

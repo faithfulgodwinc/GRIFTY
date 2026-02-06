@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors } from '@/constants/Colors';
+import { Colors, Gradients } from '@/constants/Colors';
 import { GlassCard } from '@/components/GlassCard';
 import { Ionicons } from '@expo/vector-icons';
 import { useTextGeneration } from '@fastshot/ai';
@@ -107,7 +107,7 @@ export default function CoachScreen() {
   };
 
   return (
-    <LinearGradient colors={[Colors.background, Colors.darkPurple]} style={styles.container}>
+    <LinearGradient colors={Gradients.background} style={styles.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -271,12 +271,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
   },
   status: {
     fontSize: 12,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
     marginTop: 2,
+    fontWeight: '500',
   },
   messagesContainer: {
     paddingHorizontal: 20,
@@ -305,21 +306,21 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   aiMessage: {
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: Colors.glassBorder,
     borderBottomLeftRadius: 4,
   },
   messageText: {
     fontSize: 15,
-    color: Colors.white,
+    color: Colors.primaryText,
     lineHeight: 22,
   },
   aiAvatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.white,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -343,7 +344,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   loadingBubble: {
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: Colors.glassBorder,
     padding: 16,
@@ -357,7 +358,7 @@ const styles = StyleSheet.create({
   quickRepliesTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
     marginBottom: 12,
   },
   quickReplies: {
@@ -392,18 +393,23 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.white,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: Colors.glassBorder,
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   input: {
     flex: 1,
     fontSize: 15,
-    color: Colors.white,
+    color: Colors.primaryText,
     maxHeight: 100,
     paddingVertical: 8,
   },

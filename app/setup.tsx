@@ -58,7 +58,7 @@ export default function SetupScreen() {
   };
 
   return (
-    <LinearGradient colors={[Colors.background, Colors.darkPurple]} style={styles.container}>
+    <LinearGradient colors={Gradients.background} style={styles.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -160,16 +160,17 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
     textAlign: 'center',
     lineHeight: 40,
     marginBottom: 12,
   },
   subtitle: {
     fontSize: 16,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
     textAlign: 'center',
     lineHeight: 24,
+    fontWeight: '500',
   },
   form: {
     flex: 1,
@@ -180,17 +181,22 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.white,
+    color: Colors.primaryText,
     marginBottom: 12,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.glassBorder,
     paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   currency: {
     fontSize: 24,
@@ -202,27 +208,34 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.primaryText,
     paddingVertical: 16,
   },
   hint: {
     fontSize: 14,
-    color: Colors.mediumGray,
+    color: Colors.tertiaryText,
     marginTop: 8,
+    fontWeight: '500',
   },
   preview: {
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.electricTeal,
     padding: 20,
     alignItems: 'center',
     marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   previewLabel: {
     fontSize: 14,
-    color: Colors.lightGray,
+    color: Colors.secondaryText,
     marginBottom: 8,
+    fontWeight: '600',
   },
   previewValue: {
     fontSize: 32,
