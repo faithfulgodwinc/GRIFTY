@@ -45,6 +45,26 @@ export interface FinancialData {
   budgetCategories?: BudgetCategory[];
 }
 
+// Daily Spending Rollover Engine Types
+export interface DailyRolloverEntry {
+  date: string; // YYYY-MM-DD
+  baseAllowance: number; // (income - savings) / daysRemaining
+  rolloverFromPrevious: number; // positive = surplus, negative = overage
+  effectiveLimit: number; // baseAllowance + rollover
+  totalSpent: number;
+  remainingAtEndOfDay: number; // effectiveLimit - totalSpent
+  underBudget: boolean;
+}
+
+export interface DailyRolloverState {
+  currentDate: string; // YYYY-MM-DD
+  todayEntry: DailyRolloverEntry;
+  tomorrowForecast: number; // projected tomorrow's limit
+  momentumStreak: number; // consecutive days under budget
+  history: DailyRolloverEntry[]; // last 30 days
+  lastUpdated: string; // ISO timestamp
+}
+
 export interface Currency {
   code: string;
   symbol: string;

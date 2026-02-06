@@ -20,8 +20,6 @@ import { supabaseSync } from '@/utils/supabase-sync';
 import { useTheme } from '@/contexts/ThemeContext';
 import { router } from 'expo-router';
 
-const { width } = Dimensions.get('window');
-
 interface SavingsWin {
   id: string;
   date: string;

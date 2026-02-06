@@ -258,7 +258,9 @@ export default function InvestScreen() {
                   colors={
                     selectedVehicle?.id === vehicle.id
                       ? [Colors.electricTeal + '15', Colors.amethyst + '15']
-                      : [Colors.white, Colors.white]
+                      : theme === 'dark'
+                        ? ['rgba(20, 10, 36, 0.85)', 'rgba(20, 10, 36, 0.85)']
+                        : [Colors.white, Colors.white]
                   }
                   style={[
                     styles.vehicleCardGradient,
@@ -266,7 +268,9 @@ export default function InvestScreen() {
                       borderColor:
                         selectedVehicle?.id === vehicle.id
                           ? Colors.electricTeal
-                          : Colors.glassBorder,
+                          : theme === 'dark'
+                            ? 'rgba(45, 212, 191, 0.2)'
+                            : Colors.glassBorder,
                       borderWidth: selectedVehicle?.id === vehicle.id ? 2 : 1,
                     },
                   ]}
@@ -626,7 +630,7 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 32,
-    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: 'rgba(128, 128, 128, 0.2)',
   },
   riskBadge: {
     flexDirection: 'row',
@@ -642,7 +646,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.08)',
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
   },
   projectionHeader: {
     marginBottom: 16,

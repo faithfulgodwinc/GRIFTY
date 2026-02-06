@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   BLUEPRINT_COMPLETE: '@grit_blueprint_complete',
   CHAT_HISTORY: '@grit_chat_history',
   STREAKS: '@grit_streaks',
+  DAILY_ROLLOVER: '@grit_daily_rollover',
 } as const;
 
 interface StorageError {

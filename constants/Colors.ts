@@ -44,6 +44,7 @@ const DarkColors = {
 const LightColors = {
   // Warm Cream Base
   background: '#FAF8F5',
+  darkPurple: '#F5F2EE',
   lightCream: '#F5F2EE',
   cardBackground: 'rgba(255, 255, 255, 0.7)',
 

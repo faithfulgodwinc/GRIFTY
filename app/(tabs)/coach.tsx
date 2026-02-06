@@ -13,12 +13,13 @@ import {
   Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Gradients } from '@/constants/Colors';
+import { getThemeColors, getGradients } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useTextGeneration } from '@fastshot/ai';
 import * as Haptics from 'expo-haptics';
 import { storage } from '@/utils/storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface Message {
   id: string;
@@ -54,6 +55,11 @@ export default function CoachScreen() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
+
+  const isDark = theme === 'dark';
+  const Colors = getThemeColors(isDark);
+  const Gradients = getGradients(isDark);
 
   const { generateText, isLoading } = useTextGeneration();
 
@@ -236,7 +242,7 @@ export default function CoachScreen() {
       <LinearGradient colors={Gradients.background} style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.electricTeal} />
-          <Text style={styles.loadingText}>Loading your conversation...</Text>
+          <Text style={[styles.loadingText, { color: Colors.secondaryText }]}>Loading your conversation...</Text>
         </View>
       </LinearGradient>
     );
@@ -250,7 +256,7 @@ export default function CoachScreen() {
         keyboardVerticalOffset={0}
       >
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { borderBottomColor: Colors.glassBorder }]}>
           <View style={styles.avatarContainer}>
             <LinearGradient
               colors={[Colors.electricTeal, Colors.vibrantPurple]}
@@ -259,16 +265,19 @@ export default function CoachScreen() {
               <Text style={styles.avatarEmoji}>✨</Text>
             </LinearGradient>
             <View>
-              <Text style={styles.title}>DIY Expert Coach</Text>
-              <Text style={styles.status}>🟢 Ready to help</Text>
+              <Text style={[styles.title, { color: Colors.primaryText }]}>DIY Expert Coach</Text>
+              <Text style={[styles.status, { color: Colors.secondaryText }]}>🟢 Ready to help</Text>
             </View>
           </View>
           {messages.length > 1 && (
             <TouchableOpacity
               onPress={handleClearHistory}
-              style={styles.clearButton}
+              style={[styles.clearButton, {
+                backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : Colors.white,
+                borderColor: isDark ? 'rgba(45, 212, 191, 0.3)' : Colors.glassBorder,
+              }]}
             >
-              <Ionicons name="trash-outline" size={20} color={Colors.tertiaryText} />
+              <Ionicons name="trash-outline" size={20} color={isDark ? Colors.electricTeal : Colors.tertiaryText} />
             </TouchableOpacity>
           )}
         </View>
@@ -288,21 +297,36 @@ export default function CoachScreen() {
                 ]}
               >
                 {!message.isUser && (
-                  <View style={styles.aiAvatar}>
+                  <View style={[styles.aiAvatar, {
+                    backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : Colors.white,
+                    borderColor: isDark ? 'rgba(45, 212, 191, 0.3)' : Colors.glassBorder,
+                  }]}>
                     <Text style={styles.aiAvatarEmoji}>✨</Text>
                   </View>
                 )}
                 <View
                   style={[
                     styles.messageBubble,
-                    message.isUser ? styles.userMessage : styles.aiMessage,
+                    message.isUser
+                      ? { backgroundColor: Colors.electricTeal, borderBottomRightRadius: 4 }
+                      : {
+                          backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : Colors.white,
+                          borderWidth: 1,
+                          borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : Colors.glassBorder,
+                          borderBottomLeftRadius: 4,
+                        },
                   ]}
                 >
-                  <Text style={styles.messageText}>{message.text}</Text>
+                  <Text style={[
+                    styles.messageText,
+                    { color: message.isUser ? '#FFFFFF' : Colors.primaryText },
+                  ]}>
+                    {message.text}
+                  </Text>
                 </View>
                 {message.isUser && (
-                  <View style={styles.userAvatar}>
-                    <Ionicons name="person" size={20} color={Colors.white} />
+                  <View style={[styles.userAvatar, { backgroundColor: Colors.radiantMagenta }]}>
+                    <Ionicons name="person" size={20} color="#FFFFFF" />
                   </View>
                 )}
               </View>
@@ -312,26 +336,31 @@ export default function CoachScreen() {
                 <View style={styles.watchLearnSection}>
                   <View style={styles.watchLearnHeader}>
                     <Ionicons name="play-circle" size={20} color={Colors.radiantMagenta} />
-                    <Text style={styles.watchLearnTitle}>Watch & Learn</Text>
+                    <Text style={[styles.watchLearnTitle, { color: Colors.primaryText }]}>Watch & Learn</Text>
                   </View>
                   <View style={styles.videoList}>
                     {message.youtubeVideos.map((video, index) => (
                       <TouchableOpacity
                         key={index}
-                        style={styles.videoCard}
+                        style={[styles.videoCard, {
+                          backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : Colors.white,
+                          borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : Colors.glassBorder,
+                        }]}
                         onPress={() => handleOpenYouTube(video.videoId)}
                         activeOpacity={0.7}
                       >
-                        <View style={styles.videoThumbnail}>
+                        <View style={[styles.videoThumbnail, {
+                          backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
+                        }]}>
                           <Text style={styles.videoEmoji}>{video.thumbnail}</Text>
                         </View>
                         <View style={styles.videoInfo}>
-                          <Text style={styles.videoTitle} numberOfLines={2}>
+                          <Text style={[styles.videoTitle, { color: Colors.primaryText }]} numberOfLines={2}>
                             {video.title}
                           </Text>
                           <View style={styles.videoFooter}>
                             <Ionicons name="logo-youtube" size={16} color={Colors.error} />
-                            <Text style={styles.videoSource}>YouTube Tutorial</Text>
+                            <Text style={[styles.videoSource, { color: Colors.tertiaryText }]}>YouTube Tutorial</Text>
                           </View>
                         </View>
                         <Ionicons name="chevron-forward" size={20} color={Colors.mediumGray} />
@@ -345,10 +374,16 @@ export default function CoachScreen() {
 
           {isLoading && (
             <View style={styles.typingIndicator}>
-              <View style={styles.aiAvatar}>
+              <View style={[styles.aiAvatar, {
+                backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : Colors.white,
+                borderColor: isDark ? 'rgba(45, 212, 191, 0.3)' : Colors.glassBorder,
+              }]}>
                 <Text style={styles.aiAvatarEmoji}>✨</Text>
               </View>
-              <View style={styles.loadingBubble}>
+              <View style={[styles.loadingBubble, {
+                backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : Colors.white,
+                borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : Colors.glassBorder,
+              }]}>
                 <ActivityIndicator size="small" color={Colors.electricTeal} />
               </View>
             </View>
@@ -358,7 +393,7 @@ export default function CoachScreen() {
         {/* Quick Replies */}
         {messages.length <= 1 && (
           <View style={styles.quickRepliesContainer}>
-            <Text style={styles.quickRepliesTitle}>Quick DIY Questions</Text>
+            <Text style={[styles.quickRepliesTitle, { color: Colors.secondaryText }]}>Quick DIY Questions</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -388,9 +423,13 @@ export default function CoachScreen() {
 
         {/* Floating Input */}
         <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 90 }]}>
-          <View style={styles.inputWrapper}>
+          <View style={[styles.inputWrapper, {
+            backgroundColor: isDark ? 'rgba(20, 10, 36, 0.95)' : Colors.white,
+            borderColor: Colors.electricTeal,
+            shadowColor: Colors.electricTeal,
+          }]}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: Colors.primaryText }]}
               placeholder="Ask me how to do something..."
               placeholderTextColor={Colors.mediumGray}
               value={inputText}
@@ -408,7 +447,7 @@ export default function CoachScreen() {
                 colors={[Colors.electricTeal, Colors.vibrantPurple] as const}
                 style={styles.sendButtonGradient}
               >
-                <Ionicons name="send" size={20} color={Colors.white} />
+                <Ionicons name="send" size={20} color="#FFFFFF" />
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -433,7 +472,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: Colors.secondaryText,
     fontWeight: '500',
   },
   header: {
@@ -441,7 +479,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.glassBorder,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -455,11 +492,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.white,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.glassBorder,
   },
   avatar: {
     width: 48,
@@ -474,11 +509,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.primaryText,
   },
   status: {
     fontSize: 12,
-    color: Colors.secondaryText,
     marginTop: 2,
     fontWeight: '500',
   },
@@ -505,30 +538,17 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 20,
   },
-  userMessage: {
-    backgroundColor: Colors.electricTeal,
-    borderBottomRightRadius: 4,
-  },
-  aiMessage: {
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-    borderBottomLeftRadius: 4,
-  },
   messageText: {
     fontSize: 15,
-    color: Colors.primaryText,
     lineHeight: 22,
   },
   aiAvatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: Colors.white,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.glassBorder,
   },
   aiAvatarEmoji: {
     fontSize: 16,
@@ -537,7 +557,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: Colors.radiantMagenta,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -548,9 +567,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   loadingBubble: {
-    backgroundColor: Colors.white,
     borderWidth: 1,
-    borderColor: Colors.glassBorder,
     padding: 16,
     borderRadius: 20,
     borderBottomLeftRadius: 4,
@@ -562,7 +579,6 @@ const styles = StyleSheet.create({
   quickRepliesTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.secondaryText,
     marginBottom: 12,
   },
   quickReplies: {
@@ -585,7 +601,7 @@ const styles = StyleSheet.create({
   quickReplyText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.white,
+    color: '#FFFFFF',
   },
   inputContainer: {
     position: 'absolute',
@@ -599,14 +615,11 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: Colors.white,
     borderRadius: 28,
     borderWidth: 2,
-    borderColor: Colors.electricTeal,
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 8,
-    shadowColor: Colors.electricTeal,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -615,7 +628,6 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    color: Colors.primaryText,
     maxHeight: 100,
     paddingVertical: 8,
   },
@@ -649,7 +661,6 @@ const styles = StyleSheet.create({
   watchLearnTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.primaryText,
   },
   videoList: {
     gap: 10,
@@ -657,10 +668,8 @@ const styles = StyleSheet.create({
   videoCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.glassBorder,
     padding: 12,
     gap: 12,
     shadowColor: '#000',
@@ -673,7 +682,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 12,
-    backgroundColor: Colors.lightCream,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -687,7 +695,6 @@ const styles = StyleSheet.create({
   videoTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.primaryText,
     lineHeight: 18,
   },
   videoFooter: {
@@ -697,7 +704,6 @@ const styles = StyleSheet.create({
   },
   videoSource: {
     fontSize: 12,
-    color: Colors.tertiaryText,
     fontWeight: '500',
   },
 });
