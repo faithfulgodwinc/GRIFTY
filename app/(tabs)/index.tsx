@@ -24,19 +24,37 @@ import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
-const DEFAULT_BUDGET_CATEGORIES: BudgetCategory[] = [
-  { id: 'household', name: 'Household', allocated: 0, spent: 0, icon: 'home', color: '#E11D48' },
-  { id: 'self-care', name: 'Self-Care', allocated: 0, spent: 0, icon: 'sparkles', color: '#EC4899' },
-  { id: 'education', name: 'Education', allocated: 0, spent: 0, icon: 'school', color: '#F59E0B' },
-  { id: 'emergency', name: 'Emergency', allocated: 0, spent: 0, icon: 'alert-circle', color: '#14B8A6' },
+// Available icons for budget categories
+const AVAILABLE_ICONS = [
+  { icon: 'home', label: 'Home' },
+  { icon: 'cart', label: 'Shopping' },
+  { icon: 'restaurant', label: 'Food' },
+  { icon: 'car', label: 'Transport' },
+  { icon: 'medkit', label: 'Health' },
+  { icon: 'school', label: 'Education' },
+  { icon: 'shirt', label: 'Clothing' },
+  { icon: 'gift', label: 'Gifts' },
+  { icon: 'football', label: 'Recreation' },
+  { icon: 'sparkles', label: 'Self-Care' },
+  { icon: 'alert-circle', label: 'Emergency' },
+  { icon: 'leaf', label: 'Utilities' },
+];
+
+const AVAILABLE_COLORS = [
+  '#E11D48', '#EC4899', '#F59E0B', '#14B8A6',
+  '#10B981', '#6366F1', '#8B5CF6', '#EF4444',
 ];
 
 export default function HomeScreen() {
   const [financialData, setFinancialData] = useState<FinancialData | null>(null);
   const [userData, setUserData] = useState<any>(null);
-  const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>(DEFAULT_BUDGET_CATEGORIES);
+  const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemIcon, setNewItemIcon] = useState('home');
+  const [newItemColor, setNewItemColor] = useState('#E11D48');
   const [error, setError] = useState<string | null>(null);
   const { theme } = useTheme();
 
@@ -62,20 +80,11 @@ export default function HomeScreen() {
       setFinancialData(financial);
       setUserData(user);
 
-      // Load or initialize budget categories
+      // Load budget categories (user must create manually)
       if (financial.budgetCategories && financial.budgetCategories.length > 0) {
         setBudgetCategories(financial.budgetCategories);
       } else {
-        // Initialize categories with default allocations
-        const totalIncome = financial.monthlyIncome || 0;
-        const savingsGoal = financial.savingsGoal || 0;
-        const availableForBudget = totalIncome - savingsGoal;
-
-        const initialCategories = DEFAULT_BUDGET_CATEGORIES.map((cat) => ({
-          ...cat,
-          allocated: availableForBudget * 0.25, // Evenly distribute 25% each
-        }));
-        setBudgetCategories(initialCategories);
+        setBudgetCategories([]);
       }
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -128,6 +137,47 @@ export default function HomeScreen() {
   const handleSmartShopperPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     router.push('/smart-shopper');
+  };
+
+  const handleAddBudgetItem = () => {
+    if (!newItemName.trim()) {
+      Alert.alert('Required', 'Please enter a budget item name');
+      return;
+    }
+
+    const newItem: BudgetCategory = {
+      id: Date.now().toString(),
+      name: newItemName.trim(),
+      allocated: 0,
+      spent: 0,
+      icon: newItemIcon,
+      color: newItemColor,
+    };
+
+    setBudgetCategories((prev) => [...prev, newItem]);
+    setNewItemName('');
+    setNewItemIcon('home');
+    setNewItemColor('#E11D48');
+    setShowAddItemModal(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleDeleteBudgetItem = (id: string) => {
+    Alert.alert(
+      'Delete Budget Item',
+      'Are you sure you want to delete this budget item?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setBudgetCategories((prev) => prev.filter((item) => item.id !== id));
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          },
+        },
+      ]
+    );
   };
 
   if (isLoading) {
@@ -208,26 +258,61 @@ export default function HomeScreen() {
         <View style={styles.budgetSection}>
           <View style={styles.budgetSectionHeader}>
             <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Monthly Budget</Text>
-            <TouchableOpacity onPress={handleOpenBudgetSetup}>
-              <Ionicons name="settings-outline" size={20} color={Colors.electricTeal} />
-            </TouchableOpacity>
+            <View style={styles.budgetHeaderActions}>
+              <TouchableOpacity
+                onPress={() => setShowAddItemModal(true)}
+                style={[styles.addButton, { backgroundColor: Colors.electricTeal }]}
+              >
+                <Ionicons name="add" size={20} color={Colors.white} />
+              </TouchableOpacity>
+              {budgetCategories.length > 0 && (
+                <TouchableOpacity onPress={handleOpenBudgetSetup}>
+                  <Ionicons name="settings-outline" size={20} color={Colors.electricTeal} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
-          <View style={styles.budgetGrid}>
-            {budgetCategories.map((category) => (
-              <View key={category.id} style={styles.budgetCategoryCard}>
-                <BudgetCategoryRing
-                  label={category.name}
-                  allocated={category.allocated}
-                  spent={category.spent}
-                  currency={currency}
-                  size={100}
-                  tealColor={Colors.electricTeal}
-                  amberColor={Colors.sunKissedAmber}
-                />
-              </View>
-            ))}
-          </View>
+          {budgetCategories.length === 0 ? (
+            <GlassCard style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateEmoji}>💰</Text>
+              <Text style={[styles.emptyStateTitle, { color: Colors.primaryText }]}>
+                Create Your Budget
+              </Text>
+              <Text style={[styles.emptyStateText, { color: Colors.secondaryText }]}>
+                Start by adding custom budget items that match your spending needs.
+              </Text>
+              <TouchableOpacity
+                style={styles.createFirstItemButton}
+                onPress={() => setShowAddItemModal(true)}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={[Colors.electricTeal, Colors.glowingGreen]}
+                  style={styles.createFirstItemGradient}
+                >
+                  <Ionicons name="add-circle-outline" size={24} color={Colors.white} />
+                  <Text style={styles.createFirstItemText}>Create First Budget Item</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </GlassCard>
+          ) : (
+            <View style={styles.budgetGrid}>
+              {budgetCategories.map((category) => (
+                <View key={category.id} style={styles.budgetCategoryCard}>
+                  <BudgetCategoryRing
+                    label={category.name}
+                    allocated={category.allocated}
+                    spent={category.spent}
+                    currency={currency}
+                    size={100}
+                    tealColor={Colors.electricTeal}
+                    amberColor={Colors.sunKissedAmber}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Smart Shopper Tool */}
@@ -330,11 +415,19 @@ export default function HomeScreen() {
             <ScrollView>
               {budgetCategories.map((category, index) => (
                 <View key={category.id} style={styles.budgetInputRow}>
-                  <View style={styles.budgetInputLabel}>
-                    <Ionicons name={category.icon as any} size={20} color={category.color} />
-                    <Text style={[styles.budgetInputName, { color: Colors.primaryText }]}>
-                      {category.name}
-                    </Text>
+                  <View style={styles.budgetInputHeader}>
+                    <View style={styles.budgetInputLabel}>
+                      <Ionicons name={category.icon as any} size={20} color={category.color} />
+                      <Text style={[styles.budgetInputName, { color: Colors.primaryText }]}>
+                        {category.name}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteBudgetItem(category.id)}
+                      style={styles.deleteItemButton}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={Colors.error} />
+                    </TouchableOpacity>
                   </View>
                   <View style={[styles.budgetInputField, { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder }]}>
                     <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
@@ -367,6 +460,124 @@ export default function HomeScreen() {
                 end={{ x: 1, y: 0 }}
               >
                 <Text style={styles.saveButtonText}>Save Budget</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Budget Item Modal */}
+      <Modal
+        visible={showAddItemModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAddItemModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: Colors.white }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>New Budget Item</Text>
+              <TouchableOpacity onPress={() => setShowAddItemModal(false)}>
+                <Ionicons name="close" size={28} color={Colors.primaryText} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Item Name */}
+              <View style={styles.inputSection}>
+                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Item Name</Text>
+                <TextInput
+                  style={[styles.textInput, { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder, color: Colors.primaryText }]}
+                  placeholder="e.g., Groceries, Rent, Transportation"
+                  placeholderTextColor={Colors.mediumGray}
+                  value={newItemName}
+                  onChangeText={setNewItemName}
+                  maxLength={30}
+                />
+              </View>
+
+              {/* Icon Selection */}
+              <View style={styles.inputSection}>
+                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Choose Icon</Text>
+                <View style={styles.iconGrid}>
+                  {AVAILABLE_ICONS.map((item) => (
+                    <TouchableOpacity
+                      key={item.icon}
+                      style={[
+                        styles.iconOption,
+                        { backgroundColor: Colors.lightCream, borderColor: Colors.glassBorder },
+                        newItemIcon === item.icon && {
+                          borderColor: Colors.electricTeal,
+                          borderWidth: 2,
+                          backgroundColor: Colors.electricTeal + '15',
+                        },
+                      ]}
+                      onPress={() => {
+                        setNewItemIcon(item.icon);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                    >
+                      <Ionicons
+                        name={item.icon as any}
+                        size={24}
+                        color={newItemIcon === item.icon ? Colors.electricTeal : Colors.secondaryText}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Color Selection */}
+              <View style={styles.inputSection}>
+                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Choose Color</Text>
+                <View style={styles.colorGrid}>
+                  {AVAILABLE_COLORS.map((color) => (
+                    <TouchableOpacity
+                      key={color}
+                      style={[
+                        styles.colorOption,
+                        { backgroundColor: color },
+                        newItemColor === color && styles.colorOptionSelected,
+                      ]}
+                      onPress={() => {
+                        setNewItemColor(color);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                    >
+                      {newItemColor === color && (
+                        <Ionicons name="checkmark" size={20} color={Colors.white} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Preview */}
+              <View style={styles.previewSection}>
+                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Preview</Text>
+                <View style={[styles.previewCard, { backgroundColor: Colors.lightCream }]}>
+                  <View style={[styles.previewIcon, { backgroundColor: newItemColor + '20' }]}>
+                    <Ionicons name={newItemIcon as any} size={32} color={newItemColor} />
+                  </View>
+                  <Text style={[styles.previewText, { color: Colors.primaryText }]}>
+                    {newItemName || 'Budget Item Name'}
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleAddBudgetItem}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[Colors.electricTeal, Colors.glowingGreen]}
+                style={styles.saveButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.saveButtonText}>Create Budget Item</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -488,6 +699,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  budgetHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  addButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#14B8A6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sectionTitle: {
     fontSize: 20,
@@ -651,14 +879,67 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
   },
+  emptyStateCard: {
+    padding: 32,
+    alignItems: 'center',
+  },
+  emptyStateEmoji: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  createFirstItemButton: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#14B8A6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  createFirstItemGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+  },
+  createFirstItemText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
   budgetInputRow: {
     marginBottom: 20,
+  },
+  budgetInputHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   budgetInputLabel: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
+  },
+  deleteItemButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   budgetInputName: {
     fontSize: 16,
@@ -700,5 +981,75 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  inputSection: {
+    marginBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  textInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+  },
+  iconGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  iconOption: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  colorOption: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  colorOptionSelected: {
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  previewSection: {
+    marginBottom: 16,
+  },
+  previewCard: {
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    gap: 12,
+  },
+  previewIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewText: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });

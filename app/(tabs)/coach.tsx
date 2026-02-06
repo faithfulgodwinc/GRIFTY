@@ -10,32 +10,40 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Gradients } from '@/constants/Colors';
-import { GlassCard } from '@/components/GlassCard';
 import { Ionicons } from '@expo/vector-icons';
 import { useTextGeneration } from '@fastshot/ai';
 import * as Haptics from 'expo-haptics';
 import { storage } from '@/utils/storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Message {
   id: string;
   text: string;
   isUser: boolean;
   timestamp: Date;
+  youtubeVideos?: YouTubeVideo[];
+}
+
+interface YouTubeVideo {
+  title: string;
+  videoId: string;
+  thumbnail: string;
 }
 
 const QUICK_REPLIES = [
-  { id: '1', text: 'Save £50 this week?', icon: '💰' },
-  { id: '2', text: 'Meal prep budget tips', icon: '🥗' },
-  { id: '3', text: 'Emergency fund advice', icon: '🆘' },
-  { id: '4', text: 'Kids savings goals', icon: '🎓' },
+  { id: '1', text: 'How to fix a leaky faucet?', icon: '🔧' },
+  { id: '2', text: 'DIY budget meal prep ideas', icon: '🥗' },
+  { id: '3', text: 'Home cleaning hacks', icon: '🧹' },
+  { id: '4', text: 'DIY natural beauty products', icon: '✨' },
 ];
 
 const INITIAL_MESSAGE: Message = {
   id: '0',
-  text: "Hello! I'm your AI financial PA. How can I help you save today?",
+  text: "Hello! I'm your DIY Expert Coach. Ask me how-to questions and I'll guide you step-by-step to save money by doing things yourself!",
   isUser: false,
   timestamp: new Date(),
 };
@@ -45,6 +53,7 @@ export default function CoachScreen() {
   const [inputText, setInputText] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
+  const insets = useSafeAreaInsets();
 
   const { generateText, isLoading } = useTextGeneration();
 
@@ -96,6 +105,33 @@ export default function CoachScreen() {
     }, 100);
   };
 
+  const generateYouTubeRecommendations = (query: string): YouTubeVideo[] => {
+    // Generate search-friendly query for YouTube
+    const searchQuery = query.replace(/[?]/g, '').trim();
+    const encodedQuery = encodeURIComponent(`${searchQuery} tutorial how to`);
+
+    // Generate relevant video suggestions
+    const videos: YouTubeVideo[] = [
+      {
+        title: `How to: ${searchQuery}`,
+        videoId: `search?q=${encodedQuery}`,
+        thumbnail: '🎥',
+      },
+      {
+        title: `DIY ${searchQuery} - Step by Step`,
+        videoId: `search?q=${encodedQuery}+step+by+step`,
+        thumbnail: '📺',
+      },
+      {
+        title: `${searchQuery} - Beginner's Guide`,
+        videoId: `search?q=${encodedQuery}+beginners+guide`,
+        thumbnail: '🎬',
+      },
+    ];
+
+    return videos;
+  };
+
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
 
@@ -112,23 +148,32 @@ export default function CoachScreen() {
     setInputText('');
 
     try {
-      const response = await generateText(`You are a friendly, empathetic financial advisor for busy mothers.
+      const response = await generateText(`You are a DIY Expert Coach helping busy mothers save money by doing things themselves.
         The user asked: "${text.trim()}"
 
-        Provide practical, actionable advice in a warm, supportive tone.
-        Keep responses concise (2-3 sentences) and focus on:
-        - Budget-friendly tips
-        - Time-saving strategies
-        - Mom-specific financial challenges
-        - Encouraging tone
+        Provide clear, step-by-step instructions in a warm, empowering tone.
+        Focus on:
+        - Simple, actionable steps (numbered if possible)
+        - Cost-saving benefits
+        - Time estimates
+        - Common mistakes to avoid
+        - Encouraging, "you can do this!" attitude
+
+        Keep responses concise but comprehensive (3-5 sentences with key steps).
+        If it's a how-to question, break it down into simple steps.
 
         Response:`);
+
+      // Generate YouTube recommendations for DIY/how-to queries
+      const isDIYQuery = /how to|diy|fix|make|create|repair|clean|build/i.test(text.trim());
+      const youtubeVideos = isDIYQuery ? generateYouTubeRecommendations(text.trim()) : undefined;
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: response || "I'm here to help! Could you provide more details?",
         isUser: false,
         timestamp: new Date(),
+        youtubeVideos,
       };
 
       setMessages((prev) => [...prev, aiMessage]);
@@ -170,6 +215,22 @@ export default function CoachScreen() {
     handleSendMessage(text);
   };
 
+  const handleOpenYouTube = async (videoId: string) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const url = `https://www.youtube.com/${videoId}`;
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', 'Unable to open YouTube');
+      }
+    } catch (error) {
+      console.error('Failed to open YouTube:', error);
+      Alert.alert('Error', 'Unable to open YouTube');
+    }
+  };
+
   if (isLoadingHistory) {
     return (
       <LinearGradient colors={Gradients.background} style={styles.container}>
@@ -186,7 +247,7 @@ export default function CoachScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
-        keyboardVerticalOffset={100}
+        keyboardVerticalOffset={0}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -198,8 +259,8 @@ export default function CoachScreen() {
               <Text style={styles.avatarEmoji}>✨</Text>
             </LinearGradient>
             <View>
-              <Text style={styles.title}>Savvy Sidekick</Text>
-              <Text style={styles.status}>🟢 Online</Text>
+              <Text style={styles.title}>DIY Expert Coach</Text>
+              <Text style={styles.status}>🟢 Ready to help</Text>
             </View>
           </View>
           {messages.length > 1 && (
@@ -219,29 +280,64 @@ export default function CoachScreen() {
           showsVerticalScrollIndicator={false}
         >
           {messages.map((message) => (
-            <View
-              key={message.id}
-              style={[
-                styles.messageWrapper,
-                message.isUser ? styles.userMessageWrapper : styles.aiMessageWrapper,
-              ]}
-            >
-              {!message.isUser && (
-                <View style={styles.aiAvatar}>
-                  <Text style={styles.aiAvatarEmoji}>✨</Text>
-                </View>
-              )}
+            <View key={message.id}>
               <View
                 style={[
-                  styles.messageBubble,
-                  message.isUser ? styles.userMessage : styles.aiMessage,
+                  styles.messageWrapper,
+                  message.isUser ? styles.userMessageWrapper : styles.aiMessageWrapper,
                 ]}
               >
-                <Text style={styles.messageText}>{message.text}</Text>
+                {!message.isUser && (
+                  <View style={styles.aiAvatar}>
+                    <Text style={styles.aiAvatarEmoji}>✨</Text>
+                  </View>
+                )}
+                <View
+                  style={[
+                    styles.messageBubble,
+                    message.isUser ? styles.userMessage : styles.aiMessage,
+                  ]}
+                >
+                  <Text style={styles.messageText}>{message.text}</Text>
+                </View>
+                {message.isUser && (
+                  <View style={styles.userAvatar}>
+                    <Ionicons name="person" size={20} color={Colors.white} />
+                  </View>
+                )}
               </View>
-              {message.isUser && (
-                <View style={styles.userAvatar}>
-                  <Ionicons name="person" size={20} color={Colors.white} />
+
+              {/* Watch & Learn Section */}
+              {!message.isUser && message.youtubeVideos && message.youtubeVideos.length > 0 && (
+                <View style={styles.watchLearnSection}>
+                  <View style={styles.watchLearnHeader}>
+                    <Ionicons name="play-circle" size={20} color={Colors.radiantMagenta} />
+                    <Text style={styles.watchLearnTitle}>Watch & Learn</Text>
+                  </View>
+                  <View style={styles.videoList}>
+                    {message.youtubeVideos.map((video, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={styles.videoCard}
+                        onPress={() => handleOpenYouTube(video.videoId)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.videoThumbnail}>
+                          <Text style={styles.videoEmoji}>{video.thumbnail}</Text>
+                        </View>
+                        <View style={styles.videoInfo}>
+                          <Text style={styles.videoTitle} numberOfLines={2}>
+                            {video.title}
+                          </Text>
+                          <View style={styles.videoFooter}>
+                            <Ionicons name="logo-youtube" size={16} color={Colors.error} />
+                            <Text style={styles.videoSource}>YouTube Tutorial</Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={Colors.mediumGray} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               )}
             </View>
@@ -262,7 +358,7 @@ export default function CoachScreen() {
         {/* Quick Replies */}
         {messages.length <= 1 && (
           <View style={styles.quickRepliesContainer}>
-            <Text style={styles.quickRepliesTitle}>Glow-Pills</Text>
+            <Text style={styles.quickRepliesTitle}>Quick DIY Questions</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -290,12 +386,12 @@ export default function CoachScreen() {
           </View>
         )}
 
-        {/* Input */}
-        <View style={styles.inputContainer}>
+        {/* Floating Input */}
+        <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 90 }]}>
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.input}
-              placeholder="Ask your AI coach..."
+              placeholder="Ask me how to do something..."
               placeholderTextColor={Colors.mediumGray}
               value={inputText}
               onChangeText={setInputText}
@@ -389,6 +485,7 @@ const styles = StyleSheet.create({
   messagesContainer: {
     paddingHorizontal: 20,
     paddingVertical: 20,
+    paddingBottom: 140,
     flexGrow: 1,
   },
   messageWrapper: {
@@ -491,27 +588,29 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   inputContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 20,
-    paddingBottom: 20,
     paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.glassBorder,
+    backgroundColor: 'transparent',
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     backgroundColor: Colors.white,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: Colors.electricTeal,
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowColor: Colors.electricTeal,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
   },
   input: {
     flex: 1,
@@ -534,5 +633,71 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  watchLearnSection: {
+    marginLeft: 40,
+    marginRight: 20,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  watchLearnHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  watchLearnTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primaryText,
+  },
+  videoList: {
+    gap: 10,
+  },
+  videoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+    padding: 12,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  videoThumbnail: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: Colors.lightCream,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoEmoji: {
+    fontSize: 28,
+  },
+  videoInfo: {
+    flex: 1,
+    gap: 6,
+  },
+  videoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primaryText,
+    lineHeight: 18,
+  },
+  videoFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  videoSource: {
+    fontSize: 12,
+    color: Colors.tertiaryText,
+    fontWeight: '500',
   },
 });
