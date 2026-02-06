@@ -3,10 +3,14 @@ import { Tabs } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Platform } from 'react-native';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+
+  // Calculate safe bottom padding - ensure minimum 20px gap for that floating feel
+  const bottomPadding = Math.max(insets.bottom, 20);
+  const tabBarHeight = 70; // Base tab bar height
+  const totalHeight = tabBarHeight + bottomPadding;
 
   return (
     <Tabs
@@ -18,8 +22,8 @@ export default function TabLayout() {
           backgroundColor: Colors.white,
           borderTopColor: Colors.glassBorder,
           borderTopWidth: 1,
-          paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 16,
-          height: Platform.OS === 'ios' ? 70 + Math.max(insets.bottom, 20) : 70,
+          paddingBottom: bottomPadding,
+          height: totalHeight,
           paddingTop: 12,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
