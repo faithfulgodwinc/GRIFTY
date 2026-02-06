@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Gradients } from '@/constants/Colors';
@@ -20,20 +21,66 @@ const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const [financialData, setFinancialData] = useState<FinancialData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadFinancialData();
   }, []);
 
   const loadFinancialData = async () => {
-    const data = await storage.getFinancialData();
-    setFinancialData(data);
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await storage.getFinancialData();
+
+      // If no data exists, initialize with default values
+      if (!data) {
+        const defaultData: FinancialData = {
+          dailySpending: 35,
+          dailyBudget: 50,
+          monthlySavings: 420,
+          savingsGoal: 1000,
+          dailyWellnessScore: 92,
+          streakDays: 0,
+        };
+        await storage.setFinancialData(defaultData);
+        setFinancialData(defaultData);
+      } else {
+        setFinancialData(data);
+      }
+    } catch (error) {
+      console.error('Failed to load financial data:', error);
+      setError('Unable to load your data. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  if (!financialData) {
+  if (isLoading) {
     return (
       <LinearGradient colors={Gradients.background} style={styles.container}>
-        <Text style={styles.loadingText}>Loading...</Text>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.electricTeal} />
+          <Text style={styles.loadingText}>Loading your dashboard...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  if (error || !financialData) {
+    return (
+      <LinearGradient colors={Gradients.background} style={styles.container}>
+        <View style={styles.centerContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={Colors.radiantMagenta} />
+          <Text style={styles.errorText}>{error || 'Unable to load data'}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={loadFinancialData}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
     );
   }
@@ -214,11 +261,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 30,
   },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    gap: 16,
+  },
   loadingText: {
-    color: Colors.primaryText,
-    fontSize: 18,
+    color: Colors.secondaryText,
+    fontSize: 16,
     textAlign: 'center',
-    marginTop: 100,
+    fontWeight: '500',
+  },
+  errorText: {
+    color: Colors.primaryText,
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 16,
+    fontWeight: '500',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    backgroundColor: Colors.electricTeal,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',

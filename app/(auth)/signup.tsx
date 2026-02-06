@@ -26,34 +26,61 @@ export default function SignUpScreen() {
 
   const handleSignUp = async () => {
     if (!email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Missing Information', 'Please fill in all fields');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert('Password Mismatch', 'Your passwords do not match. Please try again.');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert('Weak Password', 'Your password must be at least 6 characters long');
       return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const result = await signUpWithEmail(email, password);
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address');
+      return;
+    }
 
-    if (result.emailConfirmationRequired) {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const result = await signUpWithEmail(email, password);
+
+      if (result.emailConfirmationRequired) {
+        Alert.alert(
+          'Check Your Email',
+          `A verification link has been sent to ${result.email}. Please verify your email to continue.`,
+          [{ text: 'OK' }]
+        );
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (err: any) {
+      console.error('Sign up error:', err);
       Alert.alert(
-        'Check Your Email',
-        `A verification link has been sent to ${result.email}. Please verify your email to continue.`
+        'Sign Up Failed',
+        err.message || 'Unable to create your account. Please try again or use a different email.'
       );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
 
   const handleGoogleSignUp = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await signInWithGoogle();
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await signInWithGoogle();
+    } catch (err: any) {
+      console.error('Google sign up error:', err);
+      Alert.alert(
+        'Google Sign-In Failed',
+        'Unable to sign in with Google. Please try again or use email sign-up.'
+      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
 
   if (pendingEmailVerification) {
@@ -65,7 +92,7 @@ export default function SignUpScreen() {
           </View>
           <Text style={styles.verificationTitle}>Check Your Email</Text>
           <Text style={styles.verificationText}>
-            We've sent a verification link to your email address. Please click the link to verify
+            We&apos;ve sent a verification link to your email address. Please click the link to verify
             your account.
           </Text>
           <Link href="/(auth)/login" asChild>

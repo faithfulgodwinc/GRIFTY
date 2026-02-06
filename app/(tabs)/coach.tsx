@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Gradients } from '@/constants/Colors';
@@ -16,6 +17,7 @@ import { GlassCard } from '@/components/GlassCard';
 import { Ionicons } from '@expo/vector-icons';
 import { useTextGeneration } from '@fastshot/ai';
 import * as Haptics from 'expo-haptics';
+import { storage } from '@/utils/storage';
 
 interface Message {
   id: string;
@@ -31,23 +33,62 @@ const QUICK_REPLIES = [
   { id: '4', text: 'Kids savings goals', icon: '🎓' },
 ];
 
+const INITIAL_MESSAGE: Message = {
+  id: '0',
+  text: "Hello! I'm your AI financial PA. How can I help you save today?",
+  isUser: false,
+  timestamp: new Date(),
+};
+
 export default function CoachScreen() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '0',
-      text: "Hello! I'm your AI financial PA. How can I help you save today?",
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [inputText, setInputText] = useState('');
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const { generateText, isLoading } = useTextGeneration();
 
+  // Load chat history on mount
+  useEffect(() => {
+    loadChatHistory();
+  }, []);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Save chat history whenever messages change
+  useEffect(() => {
+    if (!isLoadingHistory && messages.length > 1) {
+      saveChatHistory();
+    }
+  }, [messages, isLoadingHistory]);
+
+  const loadChatHistory = async () => {
+    try {
+      const history = await storage.getChatHistory();
+      if (history && history.length > 0) {
+        const parsedMessages = history.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+        setMessages(parsedMessages);
+      }
+    } catch (error) {
+      console.error('Failed to load chat history:', error);
+      Alert.alert('Info', 'Starting a fresh conversation');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const saveChatHistory = async () => {
+    try {
+      await storage.setChatHistory(messages);
+    } catch (error) {
+      console.error('Failed to save chat history:', error);
+    }
+  };
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -91,20 +132,54 @@ export default function CoachScreen() {
       };
 
       setMessages((prev) => [...prev, aiMessage]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
+      console.error('AI generation error:', error);
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: "Sorry, I'm having trouble connecting right now. Please try again!",
+        text: "I'm having trouble connecting right now. Please check your internet connection and try again.",
         isUser: false,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
+  };
+
+  const handleClearHistory = () => {
+    Alert.alert(
+      'Clear Chat History',
+      'Are you sure you want to clear all messages? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            await storage.setChatHistory([]);
+            setMessages([INITIAL_MESSAGE]);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          },
+        },
+      ]
+    );
   };
 
   const handleQuickReply = (text: string) => {
     handleSendMessage(text);
   };
+
+  if (isLoadingHistory) {
+    return (
+      <LinearGradient colors={Gradients.background} style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.electricTeal} />
+          <Text style={styles.loadingText}>Loading your conversation...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
@@ -127,6 +202,14 @@ export default function CoachScreen() {
               <Text style={styles.status}>🟢 Online</Text>
             </View>
           </View>
+          {messages.length > 1 && (
+            <TouchableOpacity
+              onPress={handleClearHistory}
+              style={styles.clearButton}
+            >
+              <Ionicons name="trash-outline" size={20} color={Colors.tertiaryText} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Messages */}
@@ -165,7 +248,7 @@ export default function CoachScreen() {
           ))}
 
           {isLoading && (
-            <View style={styles.loadingContainer}>
+            <View style={styles.typingIndicator}>
               <View style={styles.aiAvatar}>
                 <Text style={styles.aiAvatarEmoji}>✨</Text>
               </View>
@@ -246,17 +329,41 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: Colors.secondaryText,
+    fontWeight: '500',
+  },
   header: {
     paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.glassBorder,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   avatarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  clearButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
   },
   avatar: {
     width: 48,
@@ -337,7 +444,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingContainer: {
+  typingIndicator: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,

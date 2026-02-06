@@ -4,6 +4,7 @@ import { ProtectedLayout } from '@fastshot/auth';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -14,7 +15,8 @@ export default function TabLayout() {
   const totalHeight = tabBarHeight + bottomPadding;
 
   return (
-    <ProtectedLayout redirectTo="/(auth)/login">
+    <ErrorBoundary>
+      <ProtectedLayout redirectTo="/(auth)/login">
       <Tabs
         screenOptions={{
         headerShown: false,
@@ -86,6 +88,7 @@ export default function TabLayout() {
         }}
       />
       </Tabs>
-    </ProtectedLayout>
+      </ProtectedLayout>
+    </ErrorBoundary>
   );
 }

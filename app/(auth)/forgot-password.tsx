@@ -40,7 +40,7 @@ export default function ForgotPasswordScreen() {
           </View>
           <Text style={styles.successTitle}>Check Your Email</Text>
           <Text style={styles.successText}>
-            We've sent password reset instructions to your email address. Please check your inbox
+            We&apos;ve sent password reset instructions to your email address. Please check your inbox
             and follow the link to reset your password.
           </Text>
           <Link href="/(auth)/login" asChild>
@@ -75,7 +75,7 @@ export default function ForgotPasswordScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Forgot Password?</Text>
             <Text style={styles.subtitle}>
-              Enter your email address and we'll send you instructions to reset your password.
+              Enter your email address and we&apos;ll send you instructions to reset your password.
             </Text>
           </View>
 

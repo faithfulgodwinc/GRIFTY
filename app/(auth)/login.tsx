@@ -25,17 +25,35 @@ export default function LoginScreen() {
 
   const handleEmailLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+      Alert.alert('Missing Information', 'Please enter both email and password');
       return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await signInWithEmail(email, password);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await signInWithEmail(email, password);
+    } catch (err: any) {
+      console.error('Email login error:', err);
+      Alert.alert(
+        'Login Failed',
+        err.message || 'Unable to sign in. Please check your credentials and try again.'
+      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
 
   const handleGoogleLogin = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await signInWithGoogle();
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await signInWithGoogle();
+    } catch (err: any) {
+      console.error('Google login error:', err);
+      Alert.alert(
+        'Google Sign-In Failed',
+        'Unable to sign in with Google. Please try again or use email sign-in.'
+      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
 
   return (
@@ -145,7 +163,7 @@ export default function LoginScreen() {
 
           {/* Sign Up Link */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>Don&apos;t have an account? </Text>
             <Link href="/(auth)/signup" asChild>
               <TouchableOpacity>
                 <Text style={styles.footerLink}>Sign Up</Text>
