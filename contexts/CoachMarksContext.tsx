@@ -37,7 +37,7 @@ export const TOUR_STEPS: TourStep[] = [
     targetId: 'spendable-today-card',
     title: 'Your Daily Power Number 💰',
     description: 'This is YOUR number—what you can spend guilt-free today! Calculated from your income and goals. Stay under it, build momentum, and watch your savings grow!',
-    position: 'bottom',
+    position: 'top',
     spotlightSize: 380,
   },
   {
@@ -46,7 +46,7 @@ export const TOUR_STEPS: TourStep[] = [
     targetId: 'momentum-streak-card',
     title: 'Build Your Winning Streak 🔥',
     description: 'Every day you stay under budget, you\'re leveling up! Stack these wins to unlock achievements and build unstoppable financial confidence.',
-    position: 'bottom',
+    position: 'center',
     spotlightSize: 360,
   },
   {
@@ -66,7 +66,7 @@ export const TOUR_STEPS: TourStep[] = [
     targetId: 'savings-wins-section',
     title: 'Celebrate Every Win 🏆',
     description: 'Got a discount? Resisted impulse buying? Log it here! Big or small, every smart money move deserves recognition. You\'re crushing it!',
-    position: 'bottom',
+    position: 'top',
     spotlightSize: 360,
   },
   {
@@ -75,7 +75,7 @@ export const TOUR_STEPS: TourStep[] = [
     targetId: 'mom-tips-carousel',
     title: 'Real Mom Money Hacks 💡',
     description: 'Tested-and-approved tips from moms who GET IT. Swipe through for practical, no-BS strategies that actually work in real life.',
-    position: 'bottom',
+    position: 'center',
     spotlightSize: 340,
   },
 
@@ -86,7 +86,7 @@ export const TOUR_STEPS: TourStep[] = [
     targetId: 'investment-power-card',
     title: 'Your Future, Amplified 💪',
     description: 'See how your savings translate to real wealth! These aren\'t fantasies—they\'re projections based on YOUR actual progress. Keep saving, keep growing!',
-    position: 'bottom',
+    position: 'top',
     spotlightSize: 360,
   },
   {
@@ -95,7 +95,7 @@ export const TOUR_STEPS: TourStep[] = [
     targetId: 'market-pulse-section',
     title: 'Stay Market-Smart 📈',
     description: 'Live market insights to empower your decisions. You don\'t need to be a Wall Street pro—just informed, confident, and ready to grow your wealth!',
-    position: 'bottom',
+    position: 'center',
     spotlightSize: 340,
   },
 
