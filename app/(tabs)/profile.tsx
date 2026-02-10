@@ -25,6 +25,8 @@ import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { useCoachMarks } from '@/contexts/CoachMarksContext';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+
 
 // ─── Currency Formatter ──────────────────────────────────────────────────────
 const formatCurrency = (currency: string, value: number): string => {
@@ -39,6 +41,7 @@ export default function ProfileScreen() {
   const { signOut, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { startTour } = useCoachMarks();
+  const { isPremium, showPaywall } = useSubscription();
 
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
@@ -427,6 +430,80 @@ export default function ProfileScreen() {
             </View>
           </View>
         </GlassCard>
+
+        {/* ════════ GRITIFY ELITE STATUS CARD ════════ */}
+        {isPremium ? (
+          <GlassCard animated delay={50} style={{ marginBottom: Spacing.lg }}>
+            <View style={styles.premiumCard}>
+              <View style={styles.premiumHeader}>
+                <LinearGradient
+                  colors={[Colors.electricTeal, Colors.amethyst]}
+                  style={styles.premiumBadge}
+                >
+                  <Ionicons name="trophy" size={20} color="#FFFFFF" />
+                </LinearGradient>
+                <View style={styles.premiumInfo}>
+                  <Text style={[Typography.headlineSmall, { color: Colors.primaryText }]}>
+                    Gritify Elite
+                  </Text>
+                  <Text style={[Typography.bodySmall, { color: Colors.silverGrey, marginTop: 2 }]}>
+                    Premium Mom-Boss Access
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.activeStatusDot,
+                    { backgroundColor: Colors.success },
+                  ]}
+                />
+              </View>
+              <View style={styles.premiumFeatures}>
+                <View style={styles.premiumFeature}>
+                  <Ionicons name="checkmark-circle" size={16} color={Colors.electricTeal} />
+                  <Text style={[Typography.bodySmall, { color: Colors.secondaryText, marginLeft: Spacing.sm }]}>
+                    Unlimited AI Coach Access
+                  </Text>
+                </View>
+                <View style={styles.premiumFeature}>
+                  <Ionicons name="checkmark-circle" size={16} color={Colors.electricTeal} />
+                  <Text style={[Typography.bodySmall, { color: Colors.secondaryText, marginLeft: Spacing.sm }]}>
+                    Advanced Financial Hubs
+                  </Text>
+                </View>
+                <View style={styles.premiumFeature}>
+                  <Ionicons name="checkmark-circle" size={16} color={Colors.electricTeal} />
+                  <Text style={[Typography.bodySmall, { color: Colors.secondaryText, marginLeft: Spacing.sm }]}>
+                    Exclusive Challenges & Rewards
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </GlassCard>
+        ) : (
+          <PressableScale onPress={showPaywall} scaleValue={0.98}>
+            <GlassCard animated delay={50} style={{ marginBottom: Spacing.lg }}>
+              <View style={styles.premiumCard}>
+                <View style={styles.upgradeContent}>
+                  <LinearGradient
+                    colors={[Colors.electricTeal, Colors.amethyst]}
+                    style={styles.upgradeIcon}
+                  >
+                    <Ionicons name="rocket" size={28} color="#FFFFFF" />
+                  </LinearGradient>
+                  <View style={styles.upgradeText}>
+                    <Text style={[Typography.headlineSmall, { color: Colors.primaryText }]}>
+                      Unlock Elite Access
+                    </Text>
+                    <Text style={[Typography.bodyMedium, { color: Colors.secondaryText, marginTop: Spacing.xs }]}>
+                      Get unlimited AI coaching, premium tools, and exclusive rewards
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={24} color={Colors.electricTeal} />
+                </View>
+              </View>
+            </GlassCard>
+          </PressableScale>
+        )}
 
         {/* ════════ FINANCIAL BLUEPRINT CARD ════════ */}
         <GlassCard animated delay={100} style={{ marginBottom: Spacing.lg }}>
@@ -1490,5 +1567,55 @@ const styles = StyleSheet.create({
       },
       android: { elevation: 6 },
     }),
+  },
+
+  // Premium Status Card
+  premiumCard: {
+    padding: Spacing.lg,
+  },
+  premiumHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  premiumBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  premiumInfo: {
+    flex: 1,
+  },
+  activeStatusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  premiumFeatures: {
+    gap: Spacing.sm,
+  },
+  premiumFeature: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  // Upgrade Card
+  upgradeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  upgradeIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  upgradeText: {
+    flex: 1,
   },
 });

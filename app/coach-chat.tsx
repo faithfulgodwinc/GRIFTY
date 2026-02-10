@@ -25,6 +25,9 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { GritifyElitePaywall } from '@/components/premium/GritifyElitePaywall';
+import { usePremiumFeature } from '@/hooks/usePremiumFeature';
 
 interface Message {
   id: string;
@@ -99,6 +102,8 @@ export default function CoachChatScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const router = useRouter();
+  const { paywall, refreshProfile, isPaywallVisible, hidePaywall } = useSubscription();
+  const { requirePremium } = usePremiumFeature();
 
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
@@ -321,7 +326,12 @@ Response:`);
   };
 
   const handleQuickReply = (text: string) => {
-    handleSendMessage(text);
+  };
+
+  const handlePaywallSuccess = async (profile: any) => {
+    await refreshProfile();
+    hidePaywall();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const handleOpenYouTube = async (videoId: string) => {
@@ -400,6 +410,16 @@ Response:`);
 
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
+      {/* Gritify Elite Paywall */}
+      {isPaywallVisible && paywall && (
+        <GritifyElitePaywall
+          visible={isPaywallVisible}
+          paywall={paywall}
+          onSuccess={handlePaywallSuccess}
+          onClose={hidePaywall}
+        />
+      )}
+
       {/* Premium Header with Back Button */}
       <Animated.View
         style={[

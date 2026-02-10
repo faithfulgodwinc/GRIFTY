@@ -12,6 +12,7 @@ import { Typography } from '@/constants/Theme';
 import { useCoachMarks } from '@/contexts/CoachMarksContext';
 import { CoachMarkOverlay } from '@/components/CoachMarks/CoachMarkOverlay';
 import { SuccessCelebration } from '@/components/CoachMarks/SuccessCelebration';
+import { GlobalPaywallWrapper } from '@/components/premium/GlobalPaywallWrapper';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -160,6 +161,7 @@ export default function TabLayout() {
           setShowSuccess(false);
         }}
       />
+      <GlobalPaywallWrapper />
       </ProtectedLayout>
     </ErrorBoundary>
   );

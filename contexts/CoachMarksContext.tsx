@@ -3,6 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@fastshot/auth';
 import { router } from 'expo-router';
+import { shouldShowPaywallAfterOnboarding, markPaywallShownAfterOnboarding } from './SubscriptionContext';
 
 export interface TourStep {
   id: string;
@@ -245,6 +246,14 @@ export function CoachMarksProvider({ children }: CoachMarksProviderProps) {
           .eq('id', user.id);
 
         setHasCompletedTour(true);
+
+        // Show paywall as "Grand Finale" if not shown yet
+        const shouldShow = await shouldShowPaywallAfterOnboarding();
+        if (shouldShow) {
+          await markPaywallShownAfterOnboarding();
+          // The paywall will be triggered via the subscription context
+          // when the user navigates to the home screen
+        }
       } catch (error) {
         console.error('Failed to mark tour as completed:', error);
       }
