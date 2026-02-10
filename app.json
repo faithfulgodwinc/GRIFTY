@@ -12,6 +12,7 @@
       "supportsTablet": false
     },
     "android": {
+      "package": "com.fastshot.gritify",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -38,6 +39,12 @@
     "experiments": {
       "typedRoutes": true,
       "baseUrl": ""
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d947b9f6-4361-46de-94b6-8c199e100b62"
+      }
     }
   }
 }
