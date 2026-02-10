@@ -8,6 +8,7 @@ import { supabase, cleanupSupabaseListeners } from '@/lib/supabase';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { FinancialDataProvider } from '@/contexts/FinancialDataContext';
+import { CoachMarksProvider } from '@/contexts/CoachMarksContext';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync().catch((error) => {
@@ -50,16 +51,18 @@ export default function RootLayout() {
           }}
         >
           <FinancialDataProvider>
-            <StatusBar style="auto" />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="onboarding" />
-              <Stack.Screen name="setup" />
-              <Stack.Screen name="blueprint-setup" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="auth/callback" />
-            </Stack>
+            <CoachMarksProvider>
+              <StatusBar style="auto" />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="onboarding" />
+                <Stack.Screen name="setup" />
+                <Stack.Screen name="blueprint-setup" />
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="auth/callback" />
+              </Stack>
+            </CoachMarksProvider>
           </FinancialDataProvider>
         </AuthProvider>
       </ThemeProvider>

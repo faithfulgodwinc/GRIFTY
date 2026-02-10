@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { ProtectedLayout } from '@fastshot/auth';
@@ -9,16 +9,43 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useTheme } from '@/contexts/ThemeContext';
 import { BlurView } from 'expo-blur';
 import { Typography } from '@/constants/Theme';
+import { useCoachMarks } from '@/contexts/CoachMarksContext';
+import { CoachMarkOverlay } from '@/components/CoachMarks/CoachMarkOverlay';
+import { SuccessCelebration } from '@/components/CoachMarks/SuccessCelebration';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
+  const { checkTourStatus, isTourActive } = useCoachMarks();
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const bottomPadding = Math.max(insets.bottom, 20);
   const tabBarHeight = 72;
   const totalHeight = tabBarHeight + bottomPadding;
+
+  // Check tour status on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkTourStatus();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [checkTourStatus]);
+
+  // Watch for tour completion
+  useEffect(() => {
+    if (!isTourActive && showSuccess === false) {
+      // Tour just completed, show success
+      const checkCompletion = async () => {
+        // Small delay to ensure completion animation finishes
+        setTimeout(() => {
+          setShowSuccess(true);
+        }, 300);
+      };
+      checkCompletion();
+    }
+  }, [isTourActive]);
 
   return (
     <ErrorBoundary>
@@ -131,6 +158,13 @@ export default function TabLayout() {
         }}
       />
       </Tabs>
+      <CoachMarkOverlay />
+      <SuccessCelebration
+        visible={showSuccess}
+        onClose={() => {
+          setShowSuccess(false);
+        }}
+      />
       </ProtectedLayout>
     </ErrorBoundary>
   );

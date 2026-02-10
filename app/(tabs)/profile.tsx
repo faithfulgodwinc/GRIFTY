@@ -22,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@fastshot/auth';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
+import { useCoachMarks } from '@/contexts/CoachMarksContext';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -37,6 +38,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { signOut, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { startTour } = useCoachMarks();
 
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
@@ -182,6 +184,11 @@ export default function ProfileScreen() {
       ],
     );
   }, [signOut]);
+
+  const handleRestartTour = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    startTour();
+  }, [startTour]);
 
   // ─── Loading State ─────────────────────────────────────────────────────────
   if (isLoading) {
@@ -820,6 +827,35 @@ export default function ProfileScreen() {
                   </View>
                   <Text style={[Typography.titleMedium, { color: Colors.primaryText }]}>
                     Help & Support
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={Colors.silverGrey} />
+              </View>
+            </PressableScale>
+
+            <View style={[styles.settingDivider, { backgroundColor: Colors.glassBorder }]} />
+
+            {/* Take Tour Again */}
+            <PressableScale
+              onPress={handleRestartTour}
+              scaleValue={0.98}
+            >
+              <View style={styles.settingItem}>
+                <View style={styles.settingLeft}>
+                  <View
+                    style={[
+                      styles.settingIconBg,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(168,85,247,0.12)'
+                          : 'rgba(168,85,247,0.08)',
+                      },
+                    ]}
+                  >
+                    <Ionicons name="school-outline" size={18} color={Colors.amethyst} />
+                  </View>
+                  <Text style={[Typography.titleMedium, { color: Colors.primaryText }]}>
+                    Take the Tour Again
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={Colors.silverGrey} />
