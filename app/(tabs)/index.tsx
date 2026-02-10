@@ -26,6 +26,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
+import { BlurView } from 'expo-blur';
+import { useRouter } from 'expo-router';
 
 // ─── Quick-Log Category Definitions ──────────────────────────────────────────
 const QUICK_CATEGORIES: {
@@ -248,6 +250,9 @@ export default function HomeScreen() {
   const heroScaleAnim = useRef(new Animated.Value(0.95)).current;
   const heroOpacityAnim = useRef(new Animated.Value(0)).current;
   const dailyWinAnim = useRef(new Animated.Value(0)).current;
+  const coachButtonPulse = useRef(new Animated.Value(1)).current;
+  const coachButtonGlow = useRef(new Animated.Value(0.4)).current;
+  const router = useRouter();
 
   // ─── Entrance Animations ──────────────────────────────────────────────────
   useEffect(() => {
@@ -278,6 +283,49 @@ export default function HomeScreen() {
       ]).start();
     }
   }, [isLoading, heroScaleAnim, heroOpacityAnim, dailyWinAnim]);
+
+  // ─── Floating Coach Button Breathing Animation ────────────────────────────
+  useEffect(() => {
+    // Breathing pulse animation
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(coachButtonPulse, {
+          toValue: 1.08,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(coachButtonPulse, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    // Glow animation
+    const glowLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(coachButtonGlow, {
+          toValue: 0.8,
+          duration: 2000,
+          useNativeDriver: false,
+        }),
+        Animated.timing(coachButtonGlow, {
+          toValue: 0.4,
+          duration: 2000,
+          useNativeDriver: false,
+        }),
+      ])
+    );
+
+    pulseLoop.start();
+    glowLoop.start();
+
+    return () => {
+      pulseLoop.stop();
+      glowLoop.stop();
+    };
+  }, [coachButtonPulse, coachButtonGlow]);
 
   // ─── Derived Values ────────────────────────────────────────────────────────
   const currency = profile?.currency || financialData?.currency || '\u00A3';
@@ -361,6 +409,20 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await actions.refreshAll();
   }, [actions]);
+
+  const handleOpenCoach = useCallback(async () => {
+    // Triple-tap haptic pattern for premium consultation feel
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTimeout(async () => {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }, 50);
+    setTimeout(async () => {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }, 100);
+
+    // Navigate to coach chat
+    router.push('/coach-chat');
+  }, [router]);
 
   const getStreakLabel = (): string => {
     if (momentumStreak === 0) return 'Start your streak!';
@@ -1030,6 +1092,60 @@ export default function HomeScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* ════════ FLOATING AI COACH BUTTON ════════ */}
+      <Animated.View
+        style={[
+          styles.floatingCoachButton,
+          {
+            bottom: insets.bottom + 100,
+            transform: [{ scale: coachButtonPulse }],
+            shadowColor: Colors.electricTeal,
+            shadowOffset: { width: 0, height: 8 },
+            shadowRadius: 24,
+            shadowOpacity: coachButtonGlow as any,
+            elevation: 12,
+          },
+        ]}
+        nativeID="floating-coach-icon"
+      >
+        <PressableScale onPress={handleOpenCoach} scaleValue={0.92}>
+          <BlurView
+            intensity={isDark ? 50 : 30}
+            tint={isDark ? 'dark' : 'light'}
+            style={[
+              styles.floatingCoachBlur,
+              {
+                borderColor: isDark ? 'rgba(45, 212, 191, 0.4)' : 'rgba(20, 184, 166, 0.3)',
+              },
+            ]}
+          >
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : 'rgba(255, 255, 255, 0.9)',
+                  borderRadius: 30,
+                },
+              ]}
+            />
+            <LinearGradient
+              colors={
+                isDark
+                  ? ['rgba(45, 212, 191, 0.15)', 'rgba(45, 212, 191, 0.05)']
+                  : ['rgba(20, 184, 166, 0.1)', 'rgba(20, 184, 166, 0.02)']
+              }
+              style={styles.floatingCoachGradient}
+            >
+              <Ionicons
+                name="chatbubble-ellipses"
+                size={28}
+                color={isDark ? Colors.white : Colors.silverGrey}
+              />
+            </LinearGradient>
+          </BlurView>
+        </PressableScale>
+      </Animated.View>
     </LinearGradient>
   );
 }
@@ -1683,5 +1799,29 @@ const styles = StyleSheet.create({
     ...Typography.titleLarge,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+
+  // ─── Floating AI Coach Button ──────────────────────────────────────────────
+  floatingCoachButton: {
+    position: 'absolute',
+    right: Spacing.lg,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    zIndex: 1000,
+  },
+  floatingCoachBlur: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+  },
+  floatingCoachGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

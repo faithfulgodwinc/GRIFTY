@@ -402,7 +402,7 @@ export function CoachMarkOverlay() {
         <GlassmorphicTooltip
           step={currentStep}
           currentIndex={currentStepIndex}
-          totalSteps={9}
+          totalSteps={7}
           onNext={nextStep}
           onSkip={skipTour}
         />

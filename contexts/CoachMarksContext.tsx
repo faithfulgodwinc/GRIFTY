@@ -5,7 +5,7 @@ import { useAuth } from '@fastshot/auth';
 
 export interface TourStep {
   id: string;
-  screen: 'home' | 'savings' | 'invest' | 'coach';
+  screen: 'home' | 'savings' | 'invest';
   targetId: string;
   title: string;
   description: string;
@@ -57,6 +57,15 @@ export const TOUR_STEPS: TourStep[] = [
     position: 'bottom',
     spotlightSize: 340,
   },
+  {
+    id: 'home-floating-coach',
+    screen: 'home',
+    targetId: 'floating-coach-icon',
+    title: 'Savvy Sidekick 💬',
+    description: 'Your AI financial concierge is always here! Tap this floating icon anytime for instant personalized advice, smart spending tips, and financial guidance.',
+    position: 'bottom',
+    spotlightSize: 200,
+  },
 
   // SAVINGS SCREEN STEPS
   {
@@ -95,26 +104,6 @@ export const TOUR_STEPS: TourStep[] = [
     title: 'Live Market Pulse 📈',
     description: 'Real-time market data to help you make informed investment decisions. Knowledge is power!',
     position: 'bottom',
-    spotlightSize: 340,
-  },
-
-  // COACH SCREEN STEPS
-  {
-    id: 'coach-input',
-    screen: 'coach',
-    targetId: 'coach-input-area',
-    title: 'AI Financial P.A. 🤖',
-    description: 'Ask anything about saving, budgeting, or smart spending. Your Savvy Sidekick has personalized advice!',
-    position: 'top',
-    spotlightSize: 360,
-  },
-  {
-    id: 'coach-quick-replies',
-    screen: 'coach',
-    targetId: 'quick-replies-section',
-    title: 'Quick-Reply Chips 💬',
-    description: 'Instant answers to common questions. Tap a chip for fast, AI-powered financial guidance!',
-    position: 'top',
     spotlightSize: 340,
   },
 ];

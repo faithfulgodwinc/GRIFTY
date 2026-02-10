@@ -138,13 +138,6 @@ export default function TabLayout() {
       <Tabs.Screen
         name="coach"
         options={{
-          title: 'Coach',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused && isDark ? styles.activeIconGlow : undefined}>
-              <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={color} />
-            </View>
-          ),
-          tabBarStyle: { display: 'none' },
           href: null,
         }}
       />
