@@ -210,10 +210,24 @@ function GlassmorphicTooltip({ step, currentIndex, totalSteps, onNext, onSkip, p
     };
   }, [step.id, positionConfig]);
 
-  // Calculate tooltip position
+  // Calculate tooltip position with tab bar boundary enforcement
+  const TAB_BAR_BASE_HEIGHT = 72;
+  const bottomPadding = Math.max(insets.bottom, 20);
+  const TAB_BAR_TOTAL_HEIGHT = TAB_BAR_BASE_HEIGHT + bottomPadding;
+  const MIN_BOTTOM_CLEARANCE = TAB_BAR_TOTAL_HEIGHT + 20; // Tab bar + extra margin
+
+  // Calculate available height for tooltip to prevent overflow
+  const maxTooltipHeight = SCREEN_HEIGHT - insets.top - TAB_BAR_TOTAL_HEIGHT - 60; // 60px total margins
+
   const tooltipStyle = positionConfig.tooltipTop !== undefined
-    ? { top: Math.max(positionConfig.tooltipTop, insets.top + 20) }
-    : { bottom: Math.max(positionConfig.tooltipBottom || 0, insets.bottom + 20) };
+    ? {
+        top: Math.max(positionConfig.tooltipTop, insets.top + 20),
+        maxHeight: maxTooltipHeight,
+      }
+    : {
+        bottom: Math.max(positionConfig.tooltipBottom || 0, MIN_BOTTOM_CLEARANCE),
+        maxHeight: maxTooltipHeight,
+      };
 
   return (
     <Animated.View
@@ -468,36 +482,72 @@ function calculatePosition(step: TourStep, spotlightSize: number, insets: any): 
   const SAFE_MARGIN = 20;
   const BEAK_MARGIN = 40; // Space for beak
 
+  // CRITICAL: Account for bottom navigation bar height
+  // Tab bar is ~72px + safe area insets (can be 92-110px total on iPhone with notch)
+  const TAB_BAR_BASE_HEIGHT = 72;
+  const bottomPadding = Math.max(insets.bottom, 20);
+  const TAB_BAR_TOTAL_HEIGHT = TAB_BAR_BASE_HEIGHT + bottomPadding;
+
+  // This is the hard boundary - tooltip must stay above this line
+  const BOTTOM_NAVIGATION_BOUNDARY = SCREEN_HEIGHT - TAB_BAR_TOTAL_HEIGHT;
+
   // Determine spotlight Y position based on step configuration
   let spotlightY: number;
 
   if (step.position === 'top') {
     spotlightY = SCREEN_HEIGHT * 0.2;
   } else if (step.position === 'center') {
-    spotlightY = SCREEN_HEIGHT * 0.4;
+    // Ensure center position also respects bottom boundary
+    const idealCenterY = SCREEN_HEIGHT * 0.4;
+    const maxCenterY = BOTTOM_NAVIGATION_BOUNDARY - spotlightSize / 2 - TOOLTIP_HEIGHT - BEAK_MARGIN - SAFE_MARGIN;
+    spotlightY = Math.min(idealCenterY, maxCenterY);
   } else {
-    // bottom
-    spotlightY = SCREEN_HEIGHT * 0.35;
+    // bottom - ensure spotlight doesn't overlap tab bar and leaves room for tooltip above
+    // For bottom position, we need space for: spotlight radius + beak + tooltip + margins
+    const requiredClearance = spotlightSize / 2 + BEAK_MARGIN + TOOLTIP_HEIGHT + SAFE_MARGIN * 2;
+    const maxBottomSpotlight = BOTTOM_NAVIGATION_BOUNDARY - requiredClearance;
+    const idealBottomY = SCREEN_HEIGHT * 0.35;
+
+    spotlightY = Math.min(idealBottomY, maxBottomSpotlight);
+
+    // If still too low, push up further
+    if (spotlightY + spotlightSize / 2 > BOTTOM_NAVIGATION_BOUNDARY - SAFE_MARGIN) {
+      spotlightY = BOTTOM_NAVIGATION_BOUNDARY - spotlightSize / 2 - SAFE_MARGIN;
+    }
   }
 
   const spotlightBottom = spotlightY + spotlightSize / 2;
   const spotlightTop = spotlightY - spotlightSize / 2;
 
-  // Calculate available space above and below spotlight
+  // Calculate available space above spotlight and below (accounting for tab bar)
   const spaceAbove = spotlightTop - insets.top - SAFE_MARGIN;
-  const spaceBelow = SCREEN_HEIGHT - spotlightBottom - insets.bottom - SAFE_MARGIN;
+  const spaceBelow = BOTTOM_NAVIGATION_BOUNDARY - spotlightBottom - SAFE_MARGIN;
 
   let config: PositionConfig;
 
   // Decision: Can we fit tooltip below the spotlight?
   if (spaceBelow >= TOOLTIP_HEIGHT + BEAK_MARGIN) {
-    // Place below spotlight
-    config = {
-      tooltipTop: spotlightBottom + BEAK_MARGIN,
-      beakDirection: 'up',
-      beakPosition: 'top',
-      spotlightY,
-    };
+    // Place below spotlight, ensuring it stays above tab bar
+    const tooltipTop = spotlightBottom + BEAK_MARGIN;
+    const tooltipBottomEdge = tooltipTop + TOOLTIP_HEIGHT;
+
+    // Check if tooltip would overlap tab bar
+    if (tooltipBottomEdge > BOTTOM_NAVIGATION_BOUNDARY - SAFE_MARGIN) {
+      // Would overlap - force it above spotlight instead
+      config = {
+        tooltipBottom: SCREEN_HEIGHT - spotlightTop + BEAK_MARGIN,
+        beakDirection: 'down',
+        beakPosition: 'bottom',
+        spotlightY,
+      };
+    } else {
+      config = {
+        tooltipTop,
+        beakDirection: 'up',
+        beakPosition: 'top',
+        spotlightY,
+      };
+    }
   } else if (spaceAbove >= TOOLTIP_HEIGHT + BEAK_MARGIN) {
     // Place above spotlight
     config = {
@@ -508,18 +558,27 @@ function calculatePosition(step: TourStep, spotlightSize: number, insets: any): 
     };
   } else {
     // Not enough space above or below - place in safest position
-    if (spaceBelow > spaceAbove) {
+    // Always prefer above when near bottom to avoid tab bar
+    if (spotlightY > SCREEN_HEIGHT * 0.5) {
+      // Bottom half of screen - place above
       config = {
-        tooltipTop: spotlightBottom + 20,
-        beakDirection: 'up',
-        beakPosition: 'top',
+        tooltipBottom: Math.max(
+          SCREEN_HEIGHT - spotlightTop + 20,
+          SCREEN_HEIGHT - BOTTOM_NAVIGATION_BOUNDARY + TOOLTIP_HEIGHT + SAFE_MARGIN
+        ),
+        beakDirection: 'down',
+        beakPosition: 'bottom',
         spotlightY,
       };
     } else {
+      // Top half - try below but with hard limit
+      const tooltipTop = Math.max(spotlightBottom + 20, insets.top + SAFE_MARGIN);
+      const maxAllowedTop = BOTTOM_NAVIGATION_BOUNDARY - TOOLTIP_HEIGHT - SAFE_MARGIN;
+
       config = {
-        tooltipBottom: SCREEN_HEIGHT - spotlightTop + 20,
-        beakDirection: 'down',
-        beakPosition: 'bottom',
+        tooltipTop: Math.min(tooltipTop, maxAllowedTop),
+        beakDirection: 'up',
+        beakPosition: 'top',
         spotlightY,
       };
     }
@@ -836,6 +895,7 @@ const styles = StyleSheet.create({
   tooltipContent: {
     padding: Spacing.xl + 4,
     paddingBottom: Spacing.xl,
+    flexShrink: 1, // Allow content to shrink if needed
   },
   tooltipHeader: {
     flexDirection: 'row',
