@@ -144,6 +144,8 @@ export default function TabLayout() {
               <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={color} />
             </View>
           ),
+          tabBarStyle: { display: 'none' },
+          href: null,
         }}
       />
       <Tabs.Screen

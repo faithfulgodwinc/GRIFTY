@@ -38,28 +38,39 @@ function GlassmorphicTooltip({ step, currentIndex, totalSteps, onNext, onSkip }:
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
 
   useEffect(() => {
-    // Entrance animation with spring
+    // Smoother entrance animation with refined spring parameters
     Animated.parallel([
       Animated.spring(slideAnim, {
         toValue: 1,
-        tension: 80,
-        friction: 10,
+        tension: 65,
+        friction: 12,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        tension: 60,
-        friction: 8,
+        tension: 50,
+        friction: 10,
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Haptic feedback
+    // Refined haptic feedback - lighter and more elegant
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     return () => {
-      slideAnim.setValue(0);
-      scaleAnim.setValue(0.85);
+      // Smooth exit animation
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.85,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
     };
   }, [step.id]);
 
@@ -98,33 +109,33 @@ function GlassmorphicTooltip({ step, currentIndex, totalSteps, onNext, onSkip }:
           },
         ]}
       >
-        {/* Glassmorphic Background */}
+        {/* Enhanced Glassmorphic Background */}
         <BlurView
-          intensity={isDark ? 60 : 40}
+          intensity={isDark ? 70 : 50}
           tint={isDark ? 'dark' : 'light'}
           style={styles.tooltipBlur}
         >
           <LinearGradient
             colors={
               isDark
-                ? ['rgba(20, 10, 36, 0.92)', 'rgba(20, 10, 36, 0.88)']
-                : ['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.90)']
+                ? ['rgba(20, 10, 36, 0.96)', 'rgba(20, 10, 36, 0.94)']
+                : ['rgba(255, 255, 255, 0.98)', 'rgba(255, 255, 255, 0.94)']
             }
             style={[
               styles.tooltipGradient,
               {
-                borderColor: isDark ? 'rgba(45, 212, 191, 0.25)' : 'rgba(20, 184, 166, 0.15)',
+                borderColor: isDark ? 'rgba(45, 212, 191, 0.3)' : 'rgba(20, 184, 166, 0.2)',
               },
             ]}
           >
-            {/* Ultra-thin silver border accent */}
+            {/* Enhanced border accent with subtle inner glow */}
             <View
               style={[
                 StyleSheet.absoluteFill,
                 {
                   borderRadius: BorderRadius.xxl,
                   borderWidth: 1,
-                  borderColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)',
+                  borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
                   pointerEvents: 'none',
                 },
               ]}
@@ -211,27 +222,40 @@ function GlassmorphicTooltip({ step, currentIndex, totalSteps, onNext, onSkip }:
                 {step.description}
               </Text>
 
-              {/* Next Button */}
-              <PressableScale onPress={onNext} scaleValue={0.96}>
-                <LinearGradient
-                  colors={[Colors.electricTeal, Colors.glowingGreen]}
-                  style={styles.nextButton}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
+              {/* Premium Next Button */}
+              <PressableScale onPress={onNext} scaleValue={0.97}>
+                <View
+                  style={[
+                    styles.nextButtonContainer,
+                    {
+                      shadowColor: Colors.electricTeal,
+                      shadowOffset: { width: 0, height: 6 },
+                      shadowOpacity: 0.4,
+                      shadowRadius: 16,
+                      elevation: 8,
+                    },
+                  ]}
                 >
-                  <Text
-                    style={[
-                      Typography.titleMedium,
-                      {
-                        color: '#FFFFFF',
-                        fontWeight: '700',
-                      },
-                    ]}
+                  <LinearGradient
+                    colors={[Colors.electricTeal, Colors.glowingGreen]}
+                    style={styles.nextButton}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
                   >
-                    {currentIndex === totalSteps - 1 ? 'Finish Tour' : 'Next'}
-                  </Text>
-                  <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-                </LinearGradient>
+                    <Text
+                      style={[
+                        Typography.titleMedium,
+                        {
+                          color: '#FFFFFF',
+                          fontWeight: '700',
+                        },
+                      ]}
+                    >
+                      {currentIndex === totalSteps - 1 ? 'Finish Tour' : 'Next'}
+                    </Text>
+                    <Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
+                  </LinearGradient>
+                </View>
               </PressableScale>
             </View>
           </LinearGradient>
@@ -244,25 +268,48 @@ function GlassmorphicTooltip({ step, currentIndex, totalSteps, onNext, onSkip }:
 // ─── Pulsing Spotlight Component ────────────────────────────────────────────
 function SpotlightGlow({ size }: { size: number }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const opacityAnim = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
+    // Smoother, more subtle pulse animation
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.15,
-          duration: 1500,
+          toValue: 1.08,
+          duration: 2000,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
-          duration: 1500,
+          duration: 2000,
           useNativeDriver: true,
         }),
       ])
     );
+
+    // Gentle opacity pulse for a breathing effect
+    const opacityPulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacityAnim, {
+          toValue: 0.85,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0.6,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
     pulse.start();
-    return () => pulse.stop();
-  }, [pulseAnim]);
+    opacityPulse.start();
+    return () => {
+      pulse.stop();
+      opacityPulse.stop();
+    };
+  }, [pulseAnim, opacityAnim]);
 
   return (
     <Animated.View
@@ -272,14 +319,16 @@ function SpotlightGlow({ size }: { size: number }) {
           width: size,
           height: size,
           transform: [{ scale: pulseAnim }],
+          opacity: opacityAnim,
         },
       ]}
     >
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Defs>
           <SvgRadialGradient id="spotlightGrad" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="#2DD4BF" stopOpacity="0.4" />
-            <Stop offset="50%" stopColor="#2DD4BF" stopOpacity="0.15" />
+            <Stop offset="0%" stopColor="#2DD4BF" stopOpacity="0.5" />
+            <Stop offset="40%" stopColor="#2DD4BF" stopOpacity="0.25" />
+            <Stop offset="70%" stopColor="#2DD4BF" stopOpacity="0.1" />
             <Stop offset="100%" stopColor="#2DD4BF" stopOpacity="0" />
           </SvgRadialGradient>
         </Defs>
@@ -372,19 +421,25 @@ function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip: () => 
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Refined entrance animation for welcome modal
     Animated.parallel([
       Animated.spring(scaleAnim, {
         toValue: 1,
-        tension: 60,
-        friction: 10,
+        tension: 50,
+        friction: 11,
         useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
         toValue: 1,
-        duration: 300,
+        duration: 400,
         useNativeDriver: true,
       }),
     ]).start();
+
+    // Subtle haptic feedback
+    setTimeout(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }, 100);
   }, []);
 
   return (
@@ -556,11 +611,12 @@ const styles = StyleSheet.create({
   },
   tooltipGradient: {
     borderRadius: BorderRadius.xxl + 4,
-    borderWidth: 1,
+    borderWidth: 1.5,
     overflow: 'hidden',
   },
   tooltipContent: {
-    padding: Spacing.xl,
+    padding: Spacing.xl + 4,
+    paddingBottom: Spacing.xl,
   },
   tooltipHeader: {
     flexDirection: 'row',
@@ -574,25 +630,19 @@ const styles = StyleSheet.create({
   },
   skipButton: {
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
+    paddingVertical: Spacing.xs + 1,
     borderRadius: BorderRadius.round,
+  },
+  nextButtonContainer: {
+    borderRadius: BorderRadius.xxl,
   },
   nextButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.md + 2,
+    gap: Spacing.sm + 2,
+    paddingVertical: Spacing.md + 4,
     borderRadius: BorderRadius.xxl,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#14B8A6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-      },
-      android: { elevation: 6 },
-    }),
   },
 
   // ─── Welcome Modal ─────────────────────────────────────────────────────────
@@ -613,40 +663,40 @@ const styles = StyleSheet.create({
   welcomeContent: {
     borderRadius: BorderRadius.xxl + 8,
     borderWidth: 2,
-    padding: Spacing.xxl,
+    padding: Spacing.xxl + 4,
     alignItems: 'center',
   },
   welcomeIcon: {
-    width: 80,
-    height: 80,
-    marginBottom: Spacing.lg,
-    borderRadius: 40,
+    width: 88,
+    height: 88,
+    marginBottom: Spacing.lg + 4,
+    borderRadius: 44,
   },
   welcomeIconGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
   welcomeEmoji: {
-    fontSize: 36,
+    fontSize: 40,
   },
   welcomeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
+    gap: Spacing.sm + 2,
+    paddingVertical: Spacing.lg + 2,
     borderRadius: BorderRadius.xxl,
     ...Platform.select({
       ios: {
         shadowColor: '#14B8A6',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.4,
-        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.45,
+        shadowRadius: 20,
       },
-      android: { elevation: 8 },
+      android: { elevation: 10 },
     }),
   },
 });

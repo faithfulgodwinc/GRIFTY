@@ -34,43 +34,45 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
 
   useEffect(() => {
     if (visible) {
-      // Success haptic pattern
+      // Enhanced haptic pattern for a premium celebration feel
       setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 0);
-      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 150);
-      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 300);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 120);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 240);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 360);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 480);
 
-      // Main entrance
+      // Buttery smooth main entrance
       Animated.parallel([
         Animated.spring(scaleAnim, {
           toValue: 1,
-          tension: 50,
-          friction: 8,
+          tension: 45,
+          friction: 9,
           useNativeDriver: true,
         }),
         Animated.timing(opacityAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 400,
           useNativeDriver: true,
         }),
       ]).start();
 
-      // Sparkle animations - staggered
+      // Enhanced sparkle animations with smoother timing
       const sparkleSequence = (anim: Animated.Value, delay: number) => {
         return Animated.sequence([
           Animated.delay(delay),
           Animated.spring(anim, {
             toValue: 1,
-            tension: 100,
-            friction: 5,
+            tension: 80,
+            friction: 6,
             useNativeDriver: true,
           }),
         ]);
       };
 
       Animated.parallel([
-        sparkleSequence(sparkle1, 200),
-        sparkleSequence(sparkle2, 350),
-        sparkleSequence(sparkle3, 500),
+        sparkleSequence(sparkle1, 250),
+        sparkleSequence(sparkle2, 400),
+        sparkleSequence(sparkle3, 550),
       ]).start();
     }
   }, [visible]);
@@ -197,16 +199,16 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
                 <Text style={styles.sparkleText}>🌟</Text>
               </Animated.View>
 
-              {/* Trophy Icon */}
+              {/* Premium Trophy Icon */}
               <View
                 style={[
                   styles.iconContainer,
                   {
-                    shadowColor: Colors.electricTeal,
-                    shadowOffset: { width: 0, height: 6 },
-                    shadowOpacity: 0.5,
-                    shadowRadius: 20,
-                    elevation: 12,
+                    shadowColor: '#FFD700',
+                    shadowOffset: { width: 0, height: 8 },
+                    shadowOpacity: 0.6,
+                    shadowRadius: 24,
+                    elevation: 14,
                   },
                 ]}
               >
@@ -216,6 +218,16 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
+                  {/* Inner glow effect */}
+                  <View
+                    style={[
+                      StyleSheet.absoluteFill,
+                      {
+                        borderRadius: 52,
+                        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+                      },
+                    ]}
+                  />
                   <Text style={styles.trophyEmoji}>🏆</Text>
                 </LinearGradient>
               </View>
@@ -331,41 +343,50 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 
-  // ─── Icon ──────────────────────────────────────────────────────────────────
+  // ─── Premium Icon ──────────────────────────────────────────────────────────
   iconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 104,
+    height: 104,
+    borderRadius: 52,
   },
   iconGradient: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 104,
+    height: 104,
+    borderRadius: 52,
     justifyContent: 'center',
     alignItems: 'center',
   },
   trophyEmoji: {
-    fontSize: 48,
+    fontSize: 52,
   },
 
-  // ─── Sparkles ──────────────────────────────────────────────────────────────
+  // ─── Enhanced Sparkles ─────────────────────────────────────────────────────
   sparkle: {
     position: 'absolute',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FFD700',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.6,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
   },
   sparkle1: {
-    top: 40,
-    right: 30,
-  },
-  sparkle2: {
-    top: 80,
-    left: 20,
-  },
-  sparkle3: {
-    bottom: 120,
+    top: 35,
     right: 25,
   },
+  sparkle2: {
+    top: 75,
+    left: 15,
+  },
+  sparkle3: {
+    bottom: 115,
+    right: 20,
+  },
   sparkleText: {
-    fontSize: 28,
+    fontSize: 32,
   },
 
   // ─── Badge ─────────────────────────────────────────────────────────────────
