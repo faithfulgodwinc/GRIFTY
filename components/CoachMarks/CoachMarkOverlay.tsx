@@ -93,6 +93,40 @@ function TooltipBeak({
 }
 
 // ─── Pagination Dots ─────────────────────────────────────────────────────────
+function PaginationDot({
+  isActive,
+  isDark,
+}: {
+  isActive: boolean;
+  isDark: boolean;
+}) {
+  const Colors = getThemeColors(isDark);
+  const widthAnim = useRef(new Animated.Value(isActive ? 20 : 6)).current;
+
+  useEffect(() => {
+    Animated.spring(widthAnim, {
+      toValue: isActive ? 20 : 6,
+      tension: 50,
+      friction: 8,
+      useNativeDriver: false, // Width is a layout property, must use JS driver
+    }).start();
+  }, [isActive, widthAnim]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.paginationDot,
+        {
+          backgroundColor: isActive
+            ? Colors.electricTeal
+            : isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)',
+          width: widthAnim,
+        },
+      ]}
+    />
+  );
+}
+
 function PaginationDots({
   currentIndex,
   totalSteps,
@@ -102,27 +136,15 @@ function PaginationDots({
   totalSteps: number;
   isDark: boolean;
 }) {
-  const Colors = getThemeColors(isDark);
-
   return (
     <View style={styles.paginationContainer}>
-      {Array.from({ length: totalSteps }).map((_, index) => {
-        const isActive = index === currentIndex;
-        return (
-          <Animated.View
-            key={index}
-            style={[
-              styles.paginationDot,
-              {
-                backgroundColor: isActive
-                  ? Colors.electricTeal
-                  : isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)',
-                width: isActive ? 20 : 6,
-              },
-            ]}
-          />
-        );
-      })}
+      {Array.from({ length: totalSteps }).map((_, index) => (
+        <PaginationDot
+          key={index}
+          isActive={index === currentIndex}
+          isDark={isDark}
+        />
+      ))}
     </View>
   );
 }
@@ -147,19 +169,18 @@ function GlassmorphicTooltip({ step, currentIndex, totalSteps, onNext, onSkip, p
     opacityAnim.setValue(0);
 
     // Premium glide-in animation with spring physics that feels "weighty"
+    // Using tension/friction to achieve heavy, controlled movement
     Animated.parallel([
       Animated.spring(translateY, {
         toValue: 0,
-        tension: 45,        // Lower tension = more "weight"
-        friction: 14,       // Higher friction = slower, more controlled
-        mass: 1.2,          // Increased mass = heavier feel
+        tension: 38,        // Lower tension = more "weight" and slower movement
+        friction: 14,       // Higher friction = slower, more controlled deceleration
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        tension: 42,
-        friction: 13,
-        mass: 1.1,
+        tension: 40,        // Slightly higher for subtle spring
+        friction: 13,       // Balanced friction for smooth landing
         useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
@@ -541,9 +562,8 @@ export function CoachMarkOverlay() {
     if (positionConfig) {
       Animated.spring(spotlightY, {
         toValue: positionConfig.spotlightY,
-        tension: 40,
-        friction: 14,
-        mass: 1.2,
+        tension: 42,        // Smooth, controlled spotlight movement
+        friction: 15,       // Higher friction for gentle, weighty transition
         useNativeDriver: true,
       }).start();
     }
@@ -624,8 +644,8 @@ function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip: () => 
     Animated.parallel([
       Animated.spring(scaleAnim, {
         toValue: 1,
-        tension: 50,
-        friction: 11,
+        tension: 48,        // Balanced spring for welcoming entrance
+        friction: 11,       // Controlled bounce without overshoot
         useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
@@ -729,7 +749,7 @@ function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip: () => 
                   },
                 ]}
               >
-                Take a quick 30-second tour through your new financial command center. We'll show you how to save smarter, build wealth faster, and stay in control—all while juggling everything else!
+                Take a quick 30-second tour through your new financial command center. We&apos;ll show you how to save smarter, build wealth faster, and stay in control—all while juggling everything else!
               </Text>
 
               {/* Start Button */}
