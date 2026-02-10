@@ -402,7 +402,7 @@ export function CoachMarkOverlay() {
         <GlassmorphicTooltip
           step={currentStep}
           currentIndex={currentStepIndex}
-          totalSteps={7}
+          totalSteps={8}
           onNext={nextStep}
           onSkip={skipTour}
         />
@@ -515,7 +515,7 @@ function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip: () => 
                   },
                 ]}
               >
-                Welcome to Grit!
+                Ready to Level Up?
               </Text>
 
               {/* Description */}
@@ -530,7 +530,7 @@ function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip: () => 
                   },
                 ]}
               >
-                Take a quick 30-second tour to discover how Grit helps you save smarter, not harder.
+                Take a quick 30-second tour through your new financial command center. We'll show you how to save smarter, build wealth faster, and stay in control—all while juggling everything else!
               </Text>
 
               {/* Start Button */}

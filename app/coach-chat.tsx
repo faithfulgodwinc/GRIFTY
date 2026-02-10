@@ -400,22 +400,17 @@ Response:`);
 
   return (
     <LinearGradient colors={Gradients.background} style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-        keyboardVerticalOffset={0}
+      {/* Premium Header with Back Button */}
+      <Animated.View
+        style={[
+          styles.header,
+          {
+            opacity: headerFadeAnim,
+            paddingTop: insets.top + 8,
+            borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.08)' : Colors.glassBorder,
+          },
+        ]}
       >
-        {/* Premium Header with Back Button */}
-        <Animated.View
-          style={[
-            styles.header,
-            {
-              opacity: headerFadeAnim,
-              paddingTop: insets.top + 8,
-              borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.08)' : Colors.glassBorder,
-            },
-          ]}
-        >
           <BlurView
             intensity={isDark ? 30 : 20}
             tint={isDark ? 'dark' : 'light'}
@@ -499,14 +494,14 @@ Response:`);
           </View>
         </Animated.View>
 
-        {/* Messages */}
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 }]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+      {/* Messages */}
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 180 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
           {messages.map((message) => (
             <View key={message.id}>
               <View
@@ -778,71 +773,82 @@ Response:`);
           )}
         </ScrollView>
 
-        {/* Quick Replies - Luxury Chips */}
-        {messages.length <= 1 && (
-          <View style={styles.quickRepliesContainer} nativeID="quick-replies-section">
-            <Text
-              style={[
-                styles.quickRepliesLabel,
-                {
-                  color: Colors.silverGrey,
-                  ...Typography.labelMedium,
-                },
-              ]}
-            >
-              QUICK QUESTIONS
-            </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.quickRepliesScroll}
-            >
-              {QUICK_REPLIES.map((reply) => (
-                <PressableScale
-                  key={reply.id}
-                  onPress={() => handleQuickReply(reply.text)}
-                  disabled={isLoading}
-                  scaleValue={0.95}
-                >
-                  <View style={styles.quickReplyChipOuter}>
-                    <LinearGradient
-                      colors={[Colors.electricTeal, Colors.amethyst] as const}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.quickReplyBorderGradient}
+      {/* Quick Replies - Luxury Chips */}
+      {messages.length <= 1 && (
+        <View style={styles.quickRepliesContainer} nativeID="quick-replies-section">
+          <Text
+            style={[
+              styles.quickRepliesLabel,
+              {
+                color: Colors.silverGrey,
+                ...Typography.labelMedium,
+              },
+            ]}
+          >
+            QUICK QUESTIONS
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickRepliesScroll}
+          >
+            {QUICK_REPLIES.map((reply) => (
+              <PressableScale
+                key={reply.id}
+                onPress={() => handleQuickReply(reply.text)}
+                disabled={isLoading}
+                scaleValue={0.95}
+              >
+                <View style={styles.quickReplyChipOuter}>
+                  <LinearGradient
+                    colors={[Colors.electricTeal, Colors.amethyst] as const}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.quickReplyBorderGradient}
+                  >
+                    <View
+                      style={[
+                        styles.quickReplyChipInner,
+                        {
+                          backgroundColor: isDark ? '#0A0612' : '#FAF8F5',
+                        },
+                      ]}
                     >
-                      <View
+                      <Text style={styles.quickReplyIcon}>{reply.icon}</Text>
+                      <Text
                         style={[
-                          styles.quickReplyChipInner,
+                          styles.quickReplyLabel,
                           {
-                            backgroundColor: isDark ? '#0A0612' : '#FAF8F5',
+                            color: Colors.primaryText,
+                            ...Typography.labelLarge,
+                            fontWeight: '500',
                           },
                         ]}
                       >
-                        <Text style={styles.quickReplyIcon}>{reply.icon}</Text>
-                        <Text
-                          style={[
-                            styles.quickReplyLabel,
-                            {
-                              color: Colors.primaryText,
-                              ...Typography.labelLarge,
-                              fontWeight: '500',
-                            },
-                          ]}
-                        >
-                          {reply.text}
-                        </Text>
-                      </View>
-                    </LinearGradient>
-                  </View>
-                </PressableScale>
-              ))}
-            </ScrollView>
-          </View>
-        )}
+                        {reply.text}
+                      </Text>
+                    </View>
+                  </LinearGradient>
+                </View>
+              </PressableScale>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
-        {/* Floating Premium Input Bar */}
-        <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 16 }]} nativeID="coach-input-area">
+      {/* Floating Premium Input Bar - Absolute Bottom with KeyboardAvoidingView */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingContainer}
+        keyboardVerticalOffset={0}
+      >
+        <View
+          style={[
+            styles.inputContainer,
+            { paddingBottom: Math.max(insets.bottom, 8) }
+          ]}
+          nativeID="coach-input-area"
+        >
           <BlurView
             intensity={isDark ? 50 : 30}
             tint={isDark ? 'dark' : 'light'}
@@ -918,8 +924,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  keyboardView: {
-    flex: 1,
+  keyboardAvoidingContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
 
   // ── Header ──────────────────────────────────────────────────────────────
@@ -1140,9 +1149,14 @@ const styles = StyleSheet.create({
 
   // ── Quick Replies ───────────────────────────────────────────────────────
   quickRepliesContainer: {
+    position: 'absolute',
+    bottom: 120,
+    left: 0,
+    right: 0,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
     paddingTop: Spacing.sm,
+    backgroundColor: 'transparent',
   },
   quickRepliesLabel: {
     marginBottom: Spacing.md,
@@ -1176,10 +1190,6 @@ const styles = StyleSheet.create({
 
   // ── Floating Input Bar ──────────────────────────────────────────────────
   inputContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     backgroundColor: 'transparent',

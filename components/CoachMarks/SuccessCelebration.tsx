@@ -244,7 +244,7 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
                   },
                 ]}
               >
-                Tour Complete!
+                You're Ready to GRIT!
               </Text>
 
               <Text
@@ -259,7 +259,7 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
                   },
                 ]}
               >
-                You&apos;re all set to master your finances! Start tracking, saving, and building your wealth.
+                You've explored your Dashboard, Savings Hub, and Investment Hub. Now it's time to take control, build momentum, and watch your wealth grow. You've got this! 💪
               </Text>
 
               {/* Achievement Badge */}

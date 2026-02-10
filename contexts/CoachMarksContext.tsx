@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode } fr
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@fastshot/auth';
+import { router } from 'expo-router';
 
 export interface TourStep {
   id: string;
@@ -34,8 +35,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'home-spendable-today',
     screen: 'home',
     targetId: 'spendable-today-card',
-    title: 'Spendable Today 💰',
-    description: 'Your daily budget calculated from income, goals, and rollover. Stay under this to build momentum!',
+    title: 'Your Daily Power Number 💰',
+    description: 'This is YOUR number—what you can spend guilt-free today! Calculated from your income and goals. Stay under it, build momentum, and watch your savings grow!',
     position: 'bottom',
     spotlightSize: 380,
   },
@@ -43,8 +44,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'home-momentum-streak',
     screen: 'home',
     targetId: 'momentum-streak-card',
-    title: 'Momentum Streak 🔥',
-    description: 'Days in a row you\'ve stayed under budget. Keep it going to unlock milestones and rewards!',
+    title: 'Build Your Winning Streak 🔥',
+    description: 'Every day you stay under budget, you\'re leveling up! Stack these wins to unlock achievements and build unstoppable financial confidence.',
     position: 'bottom',
     spotlightSize: 360,
   },
@@ -52,19 +53,10 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'home-quick-log',
     screen: 'home',
     targetId: 'quick-log-section',
-    title: 'Quick-Log Buttons ⚡',
-    description: 'One-tap spending tracking! Log expenses instantly for your most common categories.',
+    title: 'Track in 2 Seconds Flat ⚡',
+    description: 'Busy mom? No problem! One tap to log expenses—no typing, no hassle. Track your spending faster than ordering coffee.',
     position: 'bottom',
     spotlightSize: 340,
-  },
-  {
-    id: 'home-floating-coach',
-    screen: 'home',
-    targetId: 'floating-coach-icon',
-    title: 'Savvy Sidekick 💬',
-    description: 'Your AI financial concierge is always here! Tap this floating icon anytime for instant personalized advice, smart spending tips, and financial guidance.',
-    position: 'bottom',
-    spotlightSize: 200,
   },
 
   // SAVINGS SCREEN STEPS
@@ -72,8 +64,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'savings-wins',
     screen: 'savings',
     targetId: 'savings-wins-section',
-    title: 'Savings Wins 🏆',
-    description: 'Track and celebrate your smart money decisions! Every pound saved is a victory worth logging.',
+    title: 'Celebrate Every Win 🏆',
+    description: 'Got a discount? Resisted impulse buying? Log it here! Big or small, every smart money move deserves recognition. You\'re crushing it!',
     position: 'bottom',
     spotlightSize: 360,
   },
@@ -81,8 +73,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'savings-mom-tips',
     screen: 'savings',
     targetId: 'mom-tips-carousel',
-    title: 'Mom-Tip Carousel 💡',
-    description: 'Expert-curated money-saving tips from real moms. Swipe through for practical advice that works!',
+    title: 'Real Mom Money Hacks 💡',
+    description: 'Tested-and-approved tips from moms who GET IT. Swipe through for practical, no-BS strategies that actually work in real life.',
     position: 'bottom',
     spotlightSize: 340,
   },
@@ -92,8 +84,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'invest-power',
     screen: 'invest',
     targetId: 'investment-power-card',
-    title: 'Investment Power 💪',
-    description: 'Your real savings drive these projections. Every pound you save grows your investment potential!',
+    title: 'Your Future, Amplified 💪',
+    description: 'See how your savings translate to real wealth! These aren\'t fantasies—they\'re projections based on YOUR actual progress. Keep saving, keep growing!',
     position: 'bottom',
     spotlightSize: 360,
   },
@@ -101,10 +93,21 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'invest-market-pulse',
     screen: 'invest',
     targetId: 'market-pulse-section',
-    title: 'Live Market Pulse 📈',
-    description: 'Real-time market data to help you make informed investment decisions. Knowledge is power!',
+    title: 'Stay Market-Smart 📈',
+    description: 'Live market insights to empower your decisions. You don\'t need to be a Wall Street pro—just informed, confident, and ready to grow your wealth!',
     position: 'bottom',
     spotlightSize: 340,
+  },
+
+  // BACK TO HOME - FLOATING COACH
+  {
+    id: 'home-floating-coach',
+    screen: 'home',
+    targetId: 'floating-coach-icon',
+    title: 'Your AI Money Concierge 💬',
+    description: 'Meet your 24/7 financial bestie! Tap this floating button anytime for instant advice, budgeting tips, and personalized guidance. We\'ve got your back!',
+    position: 'bottom',
+    spotlightSize: 200,
   },
 ];
 
@@ -117,6 +120,7 @@ export function CoachMarksProvider({ children }: CoachMarksProviderProps) {
   const [isTourActive, setIsTourActive] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [hasCompletedTour, setHasCompletedTour] = useState(false);
+  const [visitedScreens, setVisitedScreens] = useState<Set<string>>(new Set());
 
   const currentStep = TOUR_STEPS[currentStepIndex] || null;
 
@@ -152,6 +156,7 @@ export function CoachMarksProvider({ children }: CoachMarksProviderProps) {
   const startTour = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setCurrentStepIndex(0);
+    setVisitedScreens(new Set());
     setIsTourActive(true);
   }, []);
 
@@ -160,12 +165,49 @@ export function CoachMarksProvider({ children }: CoachMarksProviderProps) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     if (currentStepIndex < TOUR_STEPS.length - 1) {
-      setCurrentStepIndex((prev) => prev + 1);
+      const nextStepIndex = currentStepIndex + 1;
+      const nextStepData = TOUR_STEPS[nextStepIndex];
+      const currentStepData = TOUR_STEPS[currentStepIndex];
+
+      // Track visited screen
+      setVisitedScreens((prev) => new Set(prev).add(currentStepData.screen));
+
+      // Check if we need to navigate to a different screen
+      if (nextStepData.screen !== currentStepData.screen) {
+        // Temporarily hide the tour overlay during navigation
+        setIsTourActive(false);
+
+        // Navigate to the appropriate tab with smooth animation timing
+        setTimeout(() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+          if (nextStepData.screen === 'home') {
+            router.replace('/(tabs)');
+          } else if (nextStepData.screen === 'savings') {
+            router.replace('/(tabs)/savings');
+          } else if (nextStepData.screen === 'invest') {
+            router.replace('/(tabs)/invest');
+          }
+
+          // Re-show the tour overlay after navigation completes
+          setTimeout(() => {
+            setCurrentStepIndex(nextStepIndex);
+            setIsTourActive(true);
+          }, 400);
+        }, 300);
+      } else {
+        // Same screen, just advance to next step
+        setCurrentStepIndex(nextStepIndex);
+      }
     } else {
-      // Tour completed
+      // Track final screen visit
+      const currentStepData = TOUR_STEPS[currentStepIndex];
+      setVisitedScreens((prev) => new Set(prev).add(currentStepData.screen));
+
+      // Tour completed - trigger celebration
       completeTour();
     }
-  }, [currentStepIndex]);
+  }, [currentStepIndex, visitedScreens]);
 
   // ─── Skip Tour ─────────────────────────────────────────────────────────────
   const skipTour = useCallback(async () => {
