@@ -24,16 +24,25 @@ async function retryOperation<T>(
 }
 
 // Helper to get authenticated user ID
-async function getAuthUserId(): Promise<string> {
+
+async function getAuthUserId(providedId?: string): Promise<string> {
+  if (providedId) return providedId;
+
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('No authenticated user');
-  return user.id;
+  if (user) return user.id;
+
+  // Fallback to session check
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) return session.user.id;
+
+  throw new Error('No authenticated user');
 }
 
 export const supabaseSync = {
   /**
    * Create or update user profile in Supabase with retry mechanism
    */
+
   async syncUserProfile(userData: {
     name?: string;
     avatarUrl?: string;
@@ -43,16 +52,16 @@ export const supabaseSync = {
     dailyBudget?: number;
     blueprintComplete?: boolean;
     totalSavings?: number;
-  }) {
+  }, userId?: string) {
     try {
       const result = await retryOperation(async () => {
-        const userId = await getAuthUserId();
+        const uid = await getAuthUserId(userId);
         const { data: { user } } = await supabase.auth.getUser();
 
         const { data, error } = await supabase
           .from('user_profiles')
           .upsert({
-            id: userId,
+            id: uid,
             email: user?.email,
             name: userData.name,
             avatar_url: userData.avatarUrl,
@@ -92,7 +101,7 @@ export const supabaseSync = {
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       return { success: true, data };
@@ -105,13 +114,13 @@ export const supabaseSync = {
   /**
    * Sync financial data to Supabase with retry mechanism
    */
-  async syncFinancialData(financialData: Partial<FinancialData>) {
+  async syncFinancialData(financialData: Partial<FinancialData>, userId?: string) {
     try {
       const result = await retryOperation(async () => {
-        const userId = await getAuthUserId();
+        const uid = await getAuthUserId(userId);
 
         const updateData: Record<string, unknown> = {
-          user_id: userId,
+          user_id: uid,
           updated_at: new Date().toISOString(),
         };
         if (financialData.dailyWellnessScore !== undefined) updateData.daily_wellness_score = financialData.dailyWellnessScore;
@@ -156,7 +165,7 @@ export const supabaseSync = {
         .from('financial_data')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       return { success: true, data };
@@ -415,16 +424,16 @@ export const supabaseSync = {
   /**
    * Initialize default milestones for user with retry and duplication check
    */
-  async initializeMilestones() {
+  async initializeMilestones(userId?: string) {
     try {
       const result = await retryOperation(async () => {
-        const userId = await getAuthUserId();
+        const uid = await getAuthUserId(userId);
 
         // Check if milestones already exist
         const { data: existingMilestones, error: checkError } = await supabase
           .from('milestones')
           .select('id')
-          .eq('user_id', userId)
+          .eq('user_id', uid)
           .limit(1);
 
         if (checkError) throw checkError;
@@ -446,7 +455,7 @@ export const supabaseSync = {
 
         const milestonesToInsert = defaultMilestones.map(m => ({
           ...m,
-          user_id: userId,
+          user_id: uid,
           unlocked_at: m.unlocked ? new Date().toISOString() : null,
         }));
 

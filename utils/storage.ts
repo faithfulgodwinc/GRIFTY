@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   CHAT_HISTORY: '@grit_chat_history',
   STREAKS: '@grit_streaks',
   DAILY_ROLLOVER: '@grit_daily_rollover',
+  TOUR_COMPLETE: '@grit_tour_complete',
 } as const;
 
 interface StorageError {
@@ -206,6 +207,26 @@ export const storage = {
       return safeJsonParse(data, false);
     } catch (error) {
       console.error('Failed to get blueprint status:', error);
+      return false;
+    }
+  },
+
+  async setTourComplete(complete: boolean): Promise<boolean> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.TOUR_COMPLETE, JSON.stringify(complete));
+      return true;
+    } catch (error) {
+      console.error('Failed to save tour status:', error);
+      return false;
+    }
+  },
+
+  async getTourComplete(): Promise<boolean> {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.TOUR_COMPLETE);
+      return safeJsonParse(data, false);
+    } catch (error) {
+      console.error('Failed to get tour status:', error);
       return false;
     }
   },

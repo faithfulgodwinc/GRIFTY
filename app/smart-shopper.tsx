@@ -40,13 +40,12 @@ export default function SmartShopperScreen() {
   const { analyzeImage, data, isLoading: isAILoading } = useImageAnalysis();
 
   const requestPermissions = async () => {
-    const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
     const locationStatus = await Location.requestForegroundPermissionsAsync();
 
-    if (cameraStatus.status !== 'granted' || locationStatus.status !== 'granted') {
+    if (locationStatus.status !== 'granted') {
       Alert.alert(
-        'Permissions Required',
-        'Camera and location permissions are needed for Smart Shopper.'
+        'Permission Required',
+        'Location permission is needed for local store recommendations.'
       );
       return false;
     }
@@ -72,24 +71,7 @@ export default function SmartShopperScreen() {
     return '';
   };
 
-  const handleTakePhoto = async () => {
-    const hasPermission = await requestPermissions();
-    if (!hasPermission) return;
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setSelectedImage(result.assets[0].uri);
-      await getUserLocation();
-    }
-  };
 
   const handlePickImage = async () => {
     const hasPermission = await requestPermissions();
@@ -241,25 +223,18 @@ export default function SmartShopperScreen() {
                 colors={[Colors.amethyst, Colors.electricTeal]}
                 style={styles.cameraIconContainer}
               >
-                <Ionicons name="camera" size={64} color={Colors.white} />
+                <Ionicons name="cloud-upload-outline" size={64} color={Colors.white} />
               </LinearGradient>
               <Text style={[styles.cameraText, { color: Colors.primaryText }]}>
-                Capture or upload a product photo
+                Upload a product photo
               </Text>
               <View style={styles.cameraButtons}>
                 <TouchableOpacity
-                  style={[styles.cameraButton, { backgroundColor: Colors.electricTeal }]}
-                  onPress={handleTakePhoto}
-                >
-                  <Ionicons name="camera" size={24} color={Colors.white} />
-                  <Text style={styles.cameraButtonText}>Take Photo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.cameraButton, { backgroundColor: Colors.vibrantPurple }]}
+                  style={[styles.cameraButton, { backgroundColor: Colors.vibrantPurple, flex: 1, justifyContent: 'center' }]}
                   onPress={handlePickImage}
                 >
-                  <Ionicons name="images" size={24} color={Colors.white} />
-                  <Text style={styles.cameraButtonText}>Choose Photo</Text>
+                  <Ionicons name="images-outline" size={24} color={Colors.white} />
+                  <Text style={styles.cameraButtonText}>Choose from Gallery</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -390,7 +365,7 @@ export default function SmartShopperScreen() {
             <Text style={[styles.infoTitle, { color: Colors.primaryText }]}>How It Works</Text>
           </View>
           <Text style={[styles.infoText, { color: Colors.secondaryText }]}>
-            1. Take or upload a product photo{'\n'}
+            1. Upload a product photo{'\n'}
             2. Add a short description{'\n'}
             3. AI analyzes and finds cheaper alternatives{'\n'}
             4. Get store recommendations near you

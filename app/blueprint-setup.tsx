@@ -11,17 +11,22 @@ import {
   ScrollView,
   Alert,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { Colors, Gradients } from '@/constants/Colors';
+import { getThemeColors, getGradients } from '@/constants/Colors';
 import { GlassCard } from '@/components/GlassCard';
 import { storage } from '@/utils/storage';
 import { supabaseSync } from '@/utils/supabase-sync';
-import { useAuth } from '@fastshot/auth';
+import { useAuth } from '@/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { Currency } from '@/types';
+import { Typography, Spacing, Shadows, BorderRadius } from '@/constants/Theme';
+import { BlurView } from 'expo-blur';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useFinancialData } from '@/contexts/FinancialDataContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -43,16 +48,28 @@ const DEFAULT_AVATARS = [
 ];
 
 export default function BlueprintSetupScreen() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const { actions: { refreshAll } } = useFinancialData();
   const [currentStep, setCurrentStep] = useState(0);
+
+  // Protect route
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.replace('/(auth)/login');
+    }
+  }, [isAuthenticated]);
   const [name, setName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('👩');
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>(CURRENCIES[1]); // Default to GBP
   const [monthlyIncome, setMonthlyIncome] = useState('');
   const [savingsGoal, setSavingsGoal] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  const { theme } = useTheme();
+  const Colors = getThemeColors(theme === 'dark');
+  const Gradients = getGradients(theme === 'dark');
 
   useEffect(() => {
     // Auto-fill name from Google if available
@@ -112,7 +129,10 @@ export default function BlueprintSetupScreen() {
   };
 
   const handleComplete = async () => {
+    if (isSubmitting) return;
+
     try {
+      setIsSubmitting(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       const income = parseFloat(monthlyIncome);
@@ -120,7 +140,7 @@ export default function BlueprintSetupScreen() {
       // Calculate daily budget based on actual remaining days in month
       const now = new Date();
       const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-      const daysRemaining = lastDay - now.getDate() + 1;
+      const daysRemaining = Math.max(1, lastDay - now.getDate() + 1); // Ensure at least 1 day to avoid Infinity
       const dailyBudget = (income - goal) / daysRemaining;
 
       const userData = {
@@ -152,41 +172,28 @@ export default function BlueprintSetupScreen() {
       await storage.setStreaks({ lastUpdated: new Date().toISOString(), count: 0 });
       await storage.setBlueprintComplete(true);
 
-      // Attempt to sync to Supabase with proper error handling
-      const syncResults = await Promise.allSettled([
-        supabaseSync.syncUserProfile(userData),
-        supabaseSync.syncFinancialData(financialData),
-        supabaseSync.initializeMilestones(),
-      ]);
-
-      // Check for sync failures
-      const failedSyncs = syncResults
-        .map((result, index) => {
-          if (result.status === 'fulfilled' && !result.value.success) {
-            const syncNames = ['user profile', 'financial data', 'milestones'];
-            return syncNames[index];
-          }
-          return null;
-        })
-        .filter(Boolean);
-
-      // If any syncs failed, log warning but continue (data is saved locally)
-      if (failedSyncs.length > 0) {
-        console.warn('Some data failed to sync:', failedSyncs);
-        // Optional: Show a subtle warning to user
-        Alert.alert(
-          'Sync Notice',
-          `Your data is saved locally. Some data (${failedSyncs.join(', ')}) will sync when connection improves.`,
-          [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
-        );
-        return;
+      // Attempt to sync to Supabase
+      // We await this to ensure data consistency before dashboard load, 
+      // but catch errors so we don't block the user if offline/sync fails
+      try {
+        await Promise.all([
+          supabaseSync.syncUserProfile(userData, user?.id),
+          supabaseSync.syncFinancialData(financialData, user?.id),
+          supabaseSync.initializeMilestones(user?.id),
+        ]);
+      } catch (syncError) {
+        console.warn('Background sync failed, continuing with local data', syncError);
       }
 
-      // Navigate to main app
+      // Refresh context data immediately (local)
+      await refreshAll();
+
+      // Navigate to main app immediately
       router.replace('/(tabs)');
     } catch (error) {
       console.error('Failed to complete setup:', error);
       Alert.alert('Setup Failed', 'Unable to save your data. Please try again.');
+      setIsSubmitting(false); // Only reset on error
     }
   };
 
@@ -198,8 +205,8 @@ export default function BlueprintSetupScreen() {
 
     return (
       <View style={styles.progressContainer}>
-        <View style={styles.progressBar}>
-          <Animated.View style={[styles.progressFill, { width: progressWidth }]}>
+        <View style={[styles.progressBar, { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}>
+          <Animated.View style={[styles.progressFill, { width: progressWidth, backgroundColor: Colors.electricTeal }]}>
             <LinearGradient
               colors={[Colors.electricTeal, Colors.vibrantPurple]}
               start={{ x: 0, y: 0 }}
@@ -208,38 +215,39 @@ export default function BlueprintSetupScreen() {
             />
           </Animated.View>
         </View>
-        <Text style={styles.progressText}>Step {currentStep + 1} of 4</Text>
+        <Text style={[styles.progressText, { color: Colors.tertiaryText }]}>Step {currentStep + 1} of 4</Text>
       </View>
     );
   };
 
   const renderStep1 = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepEmoji}>👋</Text>
-      <Text style={styles.stepTitle}>Welcome to Grit!</Text>
-      <Text style={styles.stepSubtitle}>Let&apos;s personalize your experience</Text>
+      <Text style={[Typography.displayMedium, styles.stepTitle, { color: Colors.primaryText }]}>Welcome to Grit!</Text>
+      <Text style={[Typography.bodyLarge, styles.stepSubtitle, { color: Colors.secondaryText }]}>Let&apos;s personalize your experience</Text>
 
-      <GlassCard style={styles.card}>
-        <Text style={styles.label}>Your Name</Text>
+      <GlassCard style={styles.glassInputCard}>
+        <Text style={[Typography.labelMedium, styles.label, { color: Colors.tertiaryText }]}>YOUR NICKNAME</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.premiumInput, { color: Colors.primaryText }]}
           placeholder="Enter your name"
-          placeholderTextColor={Colors.mediumGray}
+          placeholderTextColor={theme === 'dark' ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)"}
           value={name}
           onChangeText={setName}
           autoFocus
         />
+        <View style={[styles.inputUnderline, { backgroundColor: Colors.electricTeal, shadowColor: Colors.electricTeal }]} />
       </GlassCard>
 
-      <GlassCard style={styles.card}>
-        <Text style={styles.label}>Choose Your Avatar</Text>
+      <View style={styles.avatarSection}>
+        <Text style={[Typography.labelMedium, styles.label, { marginBottom: 12, color: Colors.tertiaryText }]}>CHOOSE AVATAR</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarScroll}>
           {DEFAULT_AVATARS.map((avatar, index) => (
             <TouchableOpacity
               key={index}
               style={[
                 styles.avatarOption,
-                selectedAvatar === avatar && styles.avatarOptionSelected,
+                { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
+                selectedAvatar === avatar && { borderColor: Colors.electricTeal, backgroundColor: 'rgba(16, 185, 129, 0.1)' },
               ]}
               onPress={() => {
                 setSelectedAvatar(avatar);
@@ -250,42 +258,46 @@ export default function BlueprintSetupScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
-      </GlassCard>
+      </View>
     </View>
   );
 
   const renderStep2 = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepEmoji}>💰</Text>
-      <Text style={styles.stepTitle}>Select Your Currency</Text>
-      <Text style={styles.stepSubtitle}>Choose your primary currency</Text>
+      <Text style={[Typography.displayMedium, styles.stepTitle, { color: Colors.primaryText }]}>Select Currency</Text>
+      <Text style={[Typography.bodyLarge, styles.stepSubtitle, { color: Colors.secondaryText }]}>Choose your primary currency</Text>
 
       <ScrollView style={styles.currencyList} showsVerticalScrollIndicator={false}>
         {CURRENCIES.map((currency) => (
           <TouchableOpacity
             key={currency.code}
-            style={[
-              styles.currencyCard,
-              selectedCurrency.code === currency.code && styles.currencyCardSelected,
-            ]}
             onPress={() => {
               setSelectedCurrency(currency);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             }}
+            activeOpacity={0.7}
           >
-            <View style={styles.currencyLeft}>
-              <Text style={styles.currencyFlag}>{currency.flag}</Text>
-              <View>
-                <Text style={styles.currencyName}>{currency.name}</Text>
-                <Text style={styles.currencyCode}>{currency.code}</Text>
+            <GlassCard
+              style={[
+                styles.currencyCard,
+                { borderColor: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
+                selectedCurrency.code === currency.code && { borderColor: Colors.electricTeal, backgroundColor: 'rgba(16, 185, 129, 0.05)' },
+              ]}
+            >
+              <View style={styles.currencyLeft}>
+                <Text style={styles.currencyFlag}>{currency.flag}</Text>
+                <View>
+                  <Text style={[Typography.titleMedium, styles.currencyName, { color: Colors.primaryText }]}>{currency.name}</Text>
+                  <Text style={[Typography.bodySmall, styles.currencyCode, { color: Colors.tertiaryText }]}>{currency.code}</Text>
+                </View>
               </View>
-            </View>
-            <Text style={styles.currencySymbol}>{currency.symbol}</Text>
-            {selectedCurrency.code === currency.code && (
-              <View style={styles.selectedBadge}>
-                <Ionicons name="checkmark-circle" size={24} color={Colors.electricTeal} />
-              </View>
-            )}
+              <Text style={[Typography.headlineMedium, styles.currencySymbol, { color: Colors.electricTeal }]}>{currency.symbol}</Text>
+              {selectedCurrency.code === currency.code && (
+                <View style={styles.selectedBadge}>
+                  <Ionicons name="checkmark-circle" size={24} color={Colors.electricTeal} />
+                </View>
+              )}
+            </GlassCard>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -294,25 +306,22 @@ export default function BlueprintSetupScreen() {
 
   const renderStep3 = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepEmoji}>📊</Text>
-      <Text style={styles.stepTitle}>Monthly Net Earnings</Text>
-      <Text style={styles.stepSubtitle}>Your take-home pay after taxes</Text>
+      <Text style={[Typography.displayMedium, styles.stepTitle, { color: Colors.primaryText }]}>Monthly Earnings</Text>
+      <Text style={[Typography.bodyLarge, styles.stepSubtitle, { color: Colors.secondaryText }]}>Your take-home pay after taxes</Text>
 
-      <GlassCard style={styles.inputCard}>
-        <View style={styles.largeInputWrapper}>
-          <Text style={styles.currencyLarge}>{selectedCurrency.symbol}</Text>
-          <TextInput
-            style={styles.largeInput}
-            placeholder="3000"
-            placeholderTextColor={Colors.mediumGray}
-            keyboardType="numeric"
-            value={monthlyIncome}
-            onChangeText={setMonthlyIncome}
-            autoFocus
-          />
-        </View>
-        <Text style={styles.hint}>Enter your monthly take-home income</Text>
-      </GlassCard>
+      <View style={styles.hugeInputContainer}>
+        <Text style={[styles.currencyHuge, { color: Colors.electricTeal }]}>{selectedCurrency.symbol}</Text>
+        <TextInput
+          style={[styles.inputHuge, { color: Colors.primaryText }]}
+          placeholder="3000"
+          placeholderTextColor={theme === 'dark' ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)"}
+          keyboardType="numeric"
+          value={monthlyIncome}
+          onChangeText={setMonthlyIncome}
+          autoFocus
+        />
+      </View>
+      <Text style={[styles.hintText, { color: Colors.tertiaryText }]}>Enter your monthly net income</Text>
     </View>
   );
 
@@ -325,43 +334,46 @@ export default function BlueprintSetupScreen() {
 
     return (
       <View style={styles.stepContainer}>
-        <Text style={styles.stepEmoji}>🎯</Text>
-        <Text style={styles.stepTitle}>Savings Goal</Text>
-        <Text style={styles.stepSubtitle}>How much do you want to save monthly?</Text>
+        <Text style={[Typography.displayMedium, styles.stepTitle, { color: Colors.primaryText }]}>Savings Goal</Text>
+        <Text style={[Typography.bodyLarge, styles.stepSubtitle, { color: Colors.secondaryText }]}>Target monthly savings</Text>
 
-        <GlassCard style={styles.inputCard}>
-          <View style={styles.largeInputWrapper}>
-            <Text style={styles.currencyLarge}>{selectedCurrency.symbol}</Text>
-            <TextInput
-              style={styles.largeInput}
-              placeholder="500"
-              placeholderTextColor={Colors.mediumGray}
-              keyboardType="numeric"
-              value={savingsGoal}
-              onChangeText={setSavingsGoal}
-              autoFocus
-            />
-          </View>
-          {income > 0 && (
-            <Text style={styles.hint}>
-              Recommended: {selectedCurrency.symbol}{recommendedMin.toFixed(0)} - {selectedCurrency.symbol}{recommendedMax.toFixed(0)} (15-20%)
+        <View style={styles.hugeInputContainer}>
+          <Text style={[styles.currencyHuge, { color: Colors.electricTeal }]}>{selectedCurrency.symbol}</Text>
+          <TextInput
+            style={[styles.inputHuge, { color: Colors.primaryText }]}
+            placeholder="500"
+            placeholderTextColor={theme === 'dark' ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)"}
+            keyboardType="numeric"
+            value={savingsGoal}
+            onChangeText={setSavingsGoal}
+            autoFocus
+          />
+        </View>
+
+        {income > 0 && (
+          <View style={styles.recommendationContainer}>
+            <Text style={[styles.hintText, { color: Colors.tertiaryText }]}>
+              Recommended: {selectedCurrency.symbol}{recommendedMin.toFixed(0)} - {selectedCurrency.symbol}{recommendedMax.toFixed(0)}
             </Text>
-          )}
-        </GlassCard>
+            <View style={[styles.percentBadge, { borderColor: 'rgba(16, 185, 129, 0.2)', backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+              <Text style={[Typography.labelSmall, { color: Colors.electricTeal }]}>15-20%</Text>
+            </View>
+          </View>
+        )}
 
         {dailyBudget > 0 && (
           <GlassCard style={styles.summaryCard}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Monthly Income</Text>
-              <Text style={styles.summaryValue}>{selectedCurrency.symbol}{income.toFixed(2)}</Text>
+            <View style={[styles.summaryRow, { borderBottomColor: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
+              <Text style={[styles.summaryLabel, { color: Colors.secondaryText }]}>Monthly Income</Text>
+              <Text style={[styles.summaryValue, { color: Colors.primaryText }]}>{selectedCurrency.symbol}{income.toFixed(0)}</Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Savings Goal</Text>
-              <Text style={styles.summaryValue}>{selectedCurrency.symbol}{goal.toFixed(2)}</Text>
+            <View style={[styles.summaryRow, { borderBottomColor: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
+              <Text style={[styles.summaryLabel, { color: Colors.secondaryText }]}>Savings Goal</Text>
+              <Text style={[styles.summaryValue, { color: Colors.primaryText }]}>{selectedCurrency.symbol}{goal.toFixed(0)}</Text>
             </View>
-            <View style={[styles.summaryRow, styles.summaryRowHighlight]}>
-              <Text style={styles.summaryLabelHighlight}>Daily Budget</Text>
-              <Text style={styles.summaryValueHighlight}>{selectedCurrency.symbol}{dailyBudget.toFixed(2)}</Text>
+            <View style={[styles.summaryRow, styles.summaryRowHighlight, { borderTopColor: Colors.electricTeal }]}>
+              <Text style={[Typography.titleMedium, { color: Colors.electricTeal }]}>Daily Budget</Text>
+              <Text style={[Typography.headlineMedium, { color: Colors.electricTeal }]}>{selectedCurrency.symbol}{dailyBudget.toFixed(2)}</Text>
             </View>
           </GlassCard>
         )}
@@ -385,14 +397,16 @@ export default function BlueprintSetupScreen() {
   };
 
   return (
-    <LinearGradient colors={Gradients.background} style={styles.container}>
+    <View style={[styles.container, { backgroundColor: Colors.background }]}>
+      <LinearGradient colors={Gradients.mesh} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <View style={styles.header}>
           {currentStep > 0 && (
-            <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+            <TouchableOpacity style={[styles.backButton, { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]} onPress={handleBack}>
               <Ionicons name="arrow-back" size={24} color={Colors.primaryText} />
             </TouchableOpacity>
           )}
@@ -409,24 +423,33 @@ export default function BlueprintSetupScreen() {
 
         <View style={styles.footer}>
           <TouchableOpacity
-            style={styles.nextButton}
+            style={[
+              styles.nextButton,
+              Shadows.glow(Colors.radiantMagenta),
+              isSubmitting && { opacity: 0.7 }
+            ]}
             onPress={handleNext}
             activeOpacity={0.8}
+            disabled={isSubmitting}
           >
             <LinearGradient
-              colors={[Colors.radiantMagenta, Colors.neonPink]}
+              colors={Gradients.primary}
               style={styles.nextButtonGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
             >
-              <Text style={styles.nextButtonText}>
-                {currentStep === 3 ? "Let&apos;s Go! 🚀" : 'Continue'}
-              </Text>
+              {isSubmitting ? (
+                <ActivityIndicator color={Colors.white} />
+              ) : (
+                <Text style={[styles.nextButtonText, { color: Colors.white }]}>
+                  {currentStep === 3 ? "Launch Dashboard 🚀" : 'Continue'}
+                </Text>
+              )}
             </LinearGradient>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -438,32 +461,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.md,
   },
   backButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.white,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: Spacing.md,
   },
   progressContainer: {
     alignItems: 'center',
   },
   progressBar: {
     width: '100%',
-    height: 6,
-    backgroundColor: Colors.lightGray,
-    borderRadius: 3,
+    height: 4,
+    borderRadius: 2,
     overflow: 'hidden',
     marginBottom: 8,
   },
@@ -471,219 +487,166 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   progressText: {
-    fontSize: 14,
-    color: Colors.secondaryText,
-    fontWeight: '600',
+    ...Typography.labelSmall,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: Spacing.xl,
     paddingBottom: 20,
   },
   stepContainer: {
     flex: 1,
     alignItems: 'center',
-  },
-  stepEmoji: {
-    fontSize: 80,
-    marginBottom: 20,
+    paddingTop: Spacing.xl,
   },
   stepTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: Colors.primaryText,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: Spacing.xs,
   },
   stepSubtitle: {
-    fontSize: 16,
-    color: Colors.secondaryText,
     textAlign: 'center',
-    marginBottom: 30,
-    fontWeight: '500',
+    marginBottom: Spacing.xxl,
+    opacity: 0.9,
   },
-  card: {
+  glassInputCard: {
     width: '100%',
-    marginBottom: 20,
+    padding: Spacing.xl,
+    marginBottom: Spacing.xl,
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.primaryText,
-    marginBottom: 12,
+    marginBottom: Spacing.sm,
   },
-  input: {
-    fontSize: 18,
-    color: Colors.primaryText,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
+  premiumInput: {
+    fontSize: 24,
+    fontWeight: '600',
+    paddingVertical: Spacing.sm,
+  },
+  inputUnderline: {
+    height: 2,
+    marginTop: Spacing.xs,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+  },
+  avatarSection: {
+    width: '100%',
   },
   avatarScroll: {
-    marginTop: 12,
+    marginTop: Spacing.sm,
   },
   avatarOption: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: Colors.lightCream,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  avatarOptionSelected: {
-    borderColor: Colors.electricTeal,
-    backgroundColor: Colors.white,
-  },
   avatarEmoji: {
-    fontSize: 36,
+    fontSize: 32,
   },
   currencyList: {
     width: '100%',
   },
   currencyCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  currencyCardSelected: {
-    borderColor: Colors.electricTeal,
+    height: 70,
   },
   currencyLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.sm,
   },
   currencyFlag: {
-    fontSize: 32,
+    fontSize: 24,
   },
   currencyName: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.primaryText,
   },
   currencyCode: {
-    fontSize: 14,
-    color: Colors.secondaryText,
-    marginTop: 2,
+    fontSize: 12,
   },
   currencySymbol: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.electricTeal,
+    fontSize: 20,
+    fontWeight: '700',
   },
   selectedBadge: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 8,
+    right: 8,
   },
-  inputCard: {
-    width: '100%',
-  },
-  largeInputWrapper: {
+  hugeInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-    paddingHorizontal: 20,
-    marginBottom: 12,
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
   },
-  currencyLarge: {
-    fontSize: 32,
+  currencyHuge: {
+    fontSize: 48,
     fontWeight: 'bold',
-    color: Colors.electricTeal,
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
-  largeInput: {
-    flex: 1,
-    fontSize: 32,
+  inputHuge: {
+    fontSize: 64,
     fontWeight: 'bold',
-    color: Colors.primaryText,
-    paddingVertical: 20,
+    minWidth: 100,
   },
-  hint: {
-    fontSize: 14,
-    color: Colors.tertiaryText,
+  hintText: {
+    ...Typography.bodyMedium,
     textAlign: 'center',
-    fontWeight: '500',
+  },
+  recommendationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  percentBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   summaryCard: {
     width: '100%',
-    marginTop: 20,
+    padding: Spacing.lg,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.glassBorder,
   },
   summaryRowHighlight: {
     borderBottomWidth: 0,
-    marginTop: 8,
-    paddingTop: 16,
-    borderTopWidth: 2,
-    borderTopColor: Colors.electricTeal,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
   },
   summaryLabel: {
-    fontSize: 16,
-    color: Colors.secondaryText,
-    fontWeight: '500',
+    ...Typography.bodyMedium,
   },
   summaryValue: {
-    fontSize: 16,
-    color: Colors.primaryText,
-    fontWeight: '600',
-  },
-  summaryLabelHighlight: {
-    fontSize: 18,
-    color: Colors.primaryText,
-    fontWeight: '700',
-  },
-  summaryValueHighlight: {
-    fontSize: 24,
-    color: Colors.electricTeal,
-    fontWeight: 'bold',
+    ...Typography.titleMedium,
   },
   footer: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? Spacing.xl : Spacing.lg,
   },
   nextButton: {
-    borderRadius: 30,
+    borderRadius: BorderRadius.round,
     overflow: 'hidden',
-    elevation: 8,
-    shadowColor: Colors.radiantMagenta,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
   },
   nextButtonGradient: {
-    paddingVertical: 20,
+    paddingVertical: 18,
     alignItems: 'center',
   },
   nextButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.white,
+    ...Typography.titleMedium,
+    fontWeight: '700',
   },
 });

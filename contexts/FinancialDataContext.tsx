@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '@fastshot/auth';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabaseSync } from '@/utils/supabase-sync';
 import { initializeDailyRollover, updateDailySpending, logSpending, calculateBaseAllowance } from '@/utils/dailyRollover';
 import { storage } from '@/utils/storage';
@@ -492,8 +492,8 @@ export function useFinancialData(): FinancialContextValue {
       monthlySpentSoFar: 0,
       wellnessScore: 50,
       actions: {
-        refreshAll: async () => {},
-        refreshExpenses: async () => {},
+        refreshAll: async () => { },
+        refreshExpenses: async () => { },
         addExpense: async () => false,
         deleteExpense: async () => false,
         addSavingsWin: async () => false,

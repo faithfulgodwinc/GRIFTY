@@ -19,13 +19,14 @@ import { GlassCard } from '@/components/GlassCard';
 import { PressableScale } from '@/components/PressableScale';
 import { DashboardSkeleton } from '@/components/SkeletonLoader';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@fastshot/auth';
+import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { useCoachMarks } from '@/contexts/CoachMarksContext';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { storage } from '@/utils/storage';
 
 
 // ─── Currency Formatter ──────────────────────────────────────────────────────
@@ -41,7 +42,22 @@ export default function ProfileScreen() {
   const { signOut, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { startTour } = useCoachMarks();
-  const { isPremium, showPaywall } = useSubscription();
+  const { isPremium, showPaywall, packages, isLoading: isSubscriptionLoading } = useSubscription();
+
+  const handleUnlockPress = () => {
+    if (isSubscriptionLoading) {
+      Alert.alert('Please wait', 'Loading subscription packages...');
+      return;
+    }
+    if (packages.length === 0) {
+      Alert.alert(
+        'Connection Error',
+        'Unable to load subscription packages. Please check your internet connection and try again.'
+      );
+      return;
+    }
+    showPaywall();
+  };
 
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
@@ -179,7 +195,9 @@ export default function ProfileScreen() {
         {
           text: 'Sign Out',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            // Clear local storage to prevent data leakage
+            await storage.clear();
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             signOut();
           },
@@ -196,15 +214,17 @@ export default function ProfileScreen() {
   // ─── Loading State ─────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <LinearGradient colors={Gradients.background} style={styles.container}>
+      <View style={styles.container}>
+        <LinearGradient colors={Gradients.mesh} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
         <DashboardSkeleton />
-      </LinearGradient>
+      </View>
     );
   }
 
   // ─── Main Render ───────────────────────────────────────────────────────────
   return (
-    <LinearGradient colors={Gradients.background} style={styles.container}>
+    <View style={styles.container}>
+      <LinearGradient colors={Gradients.mesh} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
@@ -223,7 +243,7 @@ export default function ProfileScreen() {
         {/* ════════ HEADER WITH THEME TOGGLE ════════ */}
         <View style={styles.header}>
           <View>
-            <Text style={[Typography.headlineLarge, { color: Colors.primaryText }]}>
+            <Text style={[Typography.displaySmall, { color: Colors.primaryText }]}>
               Command Center
             </Text>
             <Text
@@ -306,7 +326,7 @@ export default function ProfileScreen() {
                       colors={Gradients.hero}
                       style={styles.avatarGradientFill}
                     >
-                      <Text style={[styles.avatarInitial, { color: '#FFFFFF' }]}>
+                      <Text style={[styles.avatarInitial, { color: isDark ? '#FFFFFF' : Colors.primaryText }]}>
                         {profile?.name?.charAt(0)?.toUpperCase() || 'M'}
                       </Text>
                     </LinearGradient>
@@ -444,7 +464,7 @@ export default function ProfileScreen() {
                 </LinearGradient>
                 <View style={styles.premiumInfo}>
                   <Text style={[Typography.headlineSmall, { color: Colors.primaryText }]}>
-                    Gritify Elite
+                    Grit Elite
                   </Text>
                   <Text style={[Typography.bodySmall, { color: Colors.silverGrey, marginTop: 2 }]}>
                     Premium Mom-Boss Access
@@ -480,25 +500,31 @@ export default function ProfileScreen() {
             </View>
           </GlassCard>
         ) : (
-          <PressableScale onPress={showPaywall} scaleValue={0.98}>
+          <PressableScale onPress={handleUnlockPress} scaleValue={0.98}>
             <GlassCard animated delay={50} style={{ marginBottom: Spacing.lg }}>
               <View style={styles.premiumCard}>
-                <View style={styles.upgradeContent}>
+                <View style={[styles.upgradeContent, { paddingVertical: Spacing.sm }]}>
                   <LinearGradient
                     colors={[Colors.electricTeal, Colors.amethyst]}
-                    style={styles.upgradeIcon}
+                    style={[styles.upgradeIcon, { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }]}
                   >
-                    <Ionicons name="rocket" size={28} color="#FFFFFF" />
+                    <Ionicons name="rocket" size={24} color="#FFFFFF" />
                   </LinearGradient>
                   <View style={styles.upgradeText}>
-                    <Text style={[Typography.headlineSmall, { color: Colors.primaryText }]}>
+                    <Text style={[Typography.titleMedium, { color: Colors.primaryText, fontWeight: '700' }]}>
                       Unlock Elite Access
                     </Text>
-                    <Text style={[Typography.bodyMedium, { color: Colors.secondaryText, marginTop: Spacing.xs }]}>
-                      Get unlimited AI coaching, premium tools, and exclusive rewards
+                    <Text style={[Typography.bodySmall, { color: Colors.secondaryText, marginTop: 2 }]} numberOfLines={1}>
+                      Unlimited coaching & premium tools
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={24} color={Colors.electricTeal} />
+                  <View style={{
+                    width: 32, height: 32, borderRadius: 16,
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                    alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <Ionicons name="arrow-forward" size={18} color={Colors.electricTeal} />
+                  </View>
                 </View>
               </View>
             </GlassCard>
@@ -1188,7 +1214,7 @@ export default function ProfileScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -1564,6 +1590,7 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.4,
         shadowRadius: 12,
+        marginBottom: 50,
       },
       android: { elevation: 6 },
     }),
@@ -1593,6 +1620,11 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    position: 'absolute',
+    top: 0,
+    right: 0,
   },
   premiumFeatures: {
     gap: Spacing.sm,
@@ -1609,11 +1641,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   upgradeIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
+    // styles handled inline
   },
   upgradeText: {
     flex: 1,

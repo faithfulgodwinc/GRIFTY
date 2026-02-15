@@ -1,14 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { adapty, shouldEnableMock } from 'react-native-adapty';
-import type { AdaptyProfile, AdaptyPaywall } from 'react-native-adapty';
+import Purchases, { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import { useAuth } from './AuthContext';
 
 interface SubscriptionContextType {
-  profile: AdaptyProfile | null;
   isPremium: boolean;
   isLoading: boolean;
-  paywall: AdaptyPaywall | null;
-  refreshProfile: () => Promise<void>;
+  packages: PurchasesPackage[];
+  restorePurchases: () => Promise<CustomerInfo | null>;
+  purchasePackage: (pack: PurchasesPackage) => Promise<void>;
   showPaywall: () => void;
   hidePaywall: () => void;
   isPaywallVisible: boolean;
@@ -16,79 +17,120 @@ interface SubscriptionContextType {
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
-const ADAPTY_API_KEY = process.env.EXPO_PUBLIC_ADAPTY_API_KEY || 'mock_key';
-const PLACEMENT_ID = process.env.EXPO_PUBLIC_ADAPTY_PLACEMENT_ID || 'default';
+const API_KEYS = {
+  ios: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_IOS || 'appl_placeholder',
+  android: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID || 'goog_placeholder',
+};
+
 const PAYWALL_SHOWN_KEY = '@grit_paywall_shown_after_onboarding';
+const ENTITLEMENT_ID = 'premium'; // Ensure this matches your RevenueCat Entitlement ID
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<AdaptyProfile | null>(null);
-  const [paywall, setPaywall] = useState<AdaptyPaywall | null>(null);
+  const [isPremium, setIsPremium] = useState(false);
+  const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPaywallVisible, setIsPaywallVisible] = useState(false);
 
-  const isMockMode = shouldEnableMock();
+  const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    initializeAdapty();
+    initializePurchases();
   }, []);
 
-  const initializeAdapty = async () => {
+  // Sync Identity with RevenueCat
+  useEffect(() => {
+    const syncIdentity = async () => {
+      try {
+        if (isAuthenticated && user?.id) {
+          // Identify user in RevenueCat
+          await Purchases.logIn(user.id);
+          // console.log('[RevenueCat] Identified user:', user.id);
+        } else if (!isAuthenticated) {
+          // Reset to anonymous ID
+          await Purchases.logOut();
+          // console.log('[RevenueCat] Logged out user');
+        }
+
+        // Refresh customer info after identity change
+        const customerInfo = await Purchases.getCustomerInfo();
+        updateCustomerStatus(customerInfo);
+      } catch (e) {
+        console.error('[RevenueCat] Identity sync failed:', e);
+      }
+    };
+
+    if (!isLoading) {
+      syncIdentity();
+    }
+  }, [isAuthenticated, user?.id, isLoading]);
+
+  const initializePurchases = async () => {
     try {
-      console.log('[Adapty] Initializing...', { isMockMode });
+      if (Platform.OS === 'ios') {
+        Purchases.configure({ apiKey: API_KEYS.ios });
+      } else if (Platform.OS === 'android') {
+        Purchases.configure({ apiKey: API_KEYS.android });
+      }
 
-      await adapty.activate(ADAPTY_API_KEY, {
-        __ignoreActivationOnFastRefresh: __DEV__,
-      });
-
-      // Load profile and paywall
-      await refreshProfile();
-      await loadPaywall();
+      const customerInfo = await Purchases.getCustomerInfo();
+      updateCustomerStatus(customerInfo);
+      await loadOfferings();
     } catch (error) {
-      console.error('[Adapty] Initialization failed:', error);
+      console.error('[RevenueCat] Initialization failed:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loadPaywall = async () => {
+  const loadOfferings = async () => {
     try {
-      const paywallData = await adapty.getPaywall(PLACEMENT_ID);
-      setPaywall(paywallData);
-      console.log('[Adapty] Paywall loaded');
+      const offerings = await Purchases.getOfferings();
+      if (offerings.current && offerings.current.availablePackages.length > 0) {
+        setPackages(offerings.current.availablePackages);
+      }
     } catch (error) {
-      console.error('[Adapty] Failed to load paywall:', error);
+      console.error('[RevenueCat] Failed to load offerings:', error);
     }
   };
 
-  const refreshProfile = async () => {
+  const updateCustomerStatus = (customerInfo: CustomerInfo) => {
+    const isPro = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
+    setIsPremium(isPro);
+  };
+
+  const restorePurchases = async () => {
     try {
-      const profileData = await adapty.getProfile();
-      setProfile(profileData);
-      console.log('[Adapty] Profile refreshed', {
-        isPremium: profileData?.accessLevels?.['premium']?.isActive ?? false,
-      });
+      const customerInfo = await Purchases.restorePurchases();
+      updateCustomerStatus(customerInfo);
+      return customerInfo;
     } catch (error) {
-      console.error('[Adapty] Failed to refresh profile:', error);
+      console.error('[RevenueCat] Restore failed:', error);
+      return null;
     }
   };
 
-  const showPaywall = () => {
-    setIsPaywallVisible(true);
+  const purchasePackage = async (pack: PurchasesPackage) => {
+    try {
+      const { customerInfo } = await Purchases.purchasePackage(pack);
+      updateCustomerStatus(customerInfo);
+      setIsPaywallVisible(false);
+    } catch (error: any) {
+      if (!error.userCancelled) {
+        console.error('[RevenueCat] Purchase failed:', error);
+        throw error;
+      }
+    }
   };
 
-  const hidePaywall = () => {
-    setIsPaywallVisible(false);
-  };
-
-  const isPremium = profile?.accessLevels?.['premium']?.isActive ?? false;
+  const showPaywall = () => setIsPaywallVisible(true);
+  const hidePaywall = () => setIsPaywallVisible(false);
 
   // Check if paywall should be shown after onboarding tour completion
   useEffect(() => {
     const checkAndShowPaywall = async () => {
-      if (!isLoading && paywall && !isPremium) {
+      if (!isLoading && packages.length > 0 && !isPremium) {
         const shouldShow = await shouldShowPaywallAfterOnboarding();
         if (shouldShow) {
-          // Small delay to let the user settle on the home screen
           setTimeout(() => {
             setIsPaywallVisible(true);
           }, 1500);
@@ -97,16 +139,16 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     };
 
     checkAndShowPaywall();
-  }, [isLoading, paywall, isPremium]);
+  }, [isLoading, packages, isPremium]);
 
   return (
     <SubscriptionContext.Provider
       value={{
-        profile,
         isPremium,
         isLoading,
-        paywall,
-        refreshProfile,
+        packages,
+        restorePurchases,
+        purchasePackage,
         showPaywall,
         hidePaywall,
         isPaywallVisible,
@@ -125,7 +167,6 @@ export function useSubscription() {
   return context;
 }
 
-// Helper to check if paywall should be shown after onboarding
 export async function shouldShowPaywallAfterOnboarding(): Promise<boolean> {
   try {
     const shown = await AsyncStorage.getItem(PAYWALL_SHOWN_KEY);

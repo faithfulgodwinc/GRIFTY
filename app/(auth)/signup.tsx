@@ -9,20 +9,29 @@ import {
   Platform,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Gradients } from '@/constants/Colors';
+import { getThemeColors, getGradients } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@fastshot/auth';
+import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
+import { Typography, Spacing, Shadows, BorderRadius } from '@/constants/Theme';
+import { GlassCard } from '@/components/GlassCard';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { signUpWithEmail, signInWithGoogle, isLoading, pendingEmailVerification } = useAuth();
+  const { theme } = useTheme();
+  const Colors = getThemeColors(theme === 'dark');
+  const Gradients = getGradients(theme === 'dark');
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [pendingEmailVerification, setPendingEmailVerification] = useState(false);
 
   const handleSignUp = async () => {
     if (!email || !password || !confirmPassword) {
@@ -40,7 +49,6 @@ export default function SignUpScreen() {
       return;
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       Alert.alert('Invalid Email', 'Please enter a valid email address');
@@ -48,65 +56,108 @@ export default function SignUpScreen() {
     }
 
     try {
+      setIsLoading(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const result = await signUpWithEmail(email, password);
 
-      if (result.emailConfirmationRequired) {
-        Alert.alert(
-          'Check Your Email',
-          `A verification link has been sent to ${result.email}. Please verify your email to continue.`,
-          [{ text: 'OK' }]
-        );
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      if (data?.session) {
+        // Auto signed in (if email confirmation disabled)
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Navigate to setup
+        router.replace('/blueprint-setup');
+      } else if (data?.user) {
+        // Email confirmation required OR user already exists but is unconfirmed
+        // Supabase returns a user object but no session if confirmation is enabled
+        setPendingEmailVerification(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        // Edge case: User might already exist
+        Alert.alert('Account Info', 'If an account exists with this email, you will receive a login link.');
       }
     } catch (err: any) {
       console.error('Sign up error:', err);
-      Alert.alert(
-        'Sign Up Failed',
-        err.message || 'Unable to create your account. Please try again or use a different email.'
-      );
+      // Supabase specific error for existing user
+      if (err.message && err.message.includes('User already registered')) {
+        Alert.alert('Account Exists', 'This email is already registered. Please sign in instead.');
+      } else {
+        Alert.alert(
+          'Sign Up Failed',
+          err.message || 'Unable to create your account. Please try again.'
+        );
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleGoogleSignUp = async () => {
+    Alert.alert('Coming Soon', 'Please create an account with your email and password instead.');
+    return;
+    /*
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await signInWithGoogle();
+      setIsLoading(true);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: makeRedirectUri({
+             scheme: 'gritify',
+             path: 'auth/callback'
+           }),
+           skipBrowserRedirect: false,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+      
+      // No need to handle success here, the redirect will handle it
     } catch (err: any) {
       console.error('Google sign up error:', err);
       Alert.alert(
         'Google Sign-In Failed',
         'Unable to sign in with Google. Please try again or use email sign-up.'
       );
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsLoading(false);
     }
+    */
   };
 
   if (pendingEmailVerification) {
     return (
-      <LinearGradient colors={Gradients.hero} style={styles.container}>
+      <View style={[styles.container, { backgroundColor: Colors.background }]}>
+        <LinearGradient colors={Gradients.mesh} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
         <View style={styles.verificationContainer}>
-          <View style={styles.verificationIcon}>
+          <GlassCard style={styles.verificationIcon}>
             <Ionicons name="mail-outline" size={64} color={Colors.electricTeal} />
-          </View>
-          <Text style={styles.verificationTitle}>Check Your Email</Text>
-          <Text style={styles.verificationText}>
+          </GlassCard>
+          <Text style={[Typography.headlineMedium, styles.verificationTitle, { color: Colors.primaryText }]}>Check Your Email</Text>
+          <Text style={[Typography.bodyLarge, styles.verificationText, { color: Colors.secondaryText }]}>
             We&apos;ve sent a verification link to your email address. Please click the link to verify
             your account.
           </Text>
           <Link href="/(auth)/login" asChild>
-            <TouchableOpacity style={styles.backButton}>
-              <Text style={styles.backButtonText}>Back to Sign In</Text>
+            <TouchableOpacity style={[styles.backButton, { borderColor: Colors.glassBorder, backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+              <Text style={[styles.backButtonText, { color: Colors.primaryText }]}>Back to Sign In</Text>
             </TouchableOpacity>
           </Link>
         </View>
-      </LinearGradient>
+      </View>
     );
   }
 
   return (
-    <LinearGradient colors={Gradients.hero} style={styles.container}>
+    <View style={[styles.container, { backgroundColor: Colors.background }]}>
+      <LinearGradient colors={Gradients.mesh} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -118,114 +169,128 @@ export default function SignUpScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Join Grit!</Text>
-            <Text style={styles.subtitle}>Start your financial empowerment journey</Text>
+            <Text style={[Typography.displayMedium, styles.title, { color: Colors.primaryText }]}>Join Grit!</Text>
+            <Text style={[Typography.bodyLarge, styles.subtitle, { color: Colors.secondaryText }]}>Start your financial empowerment journey</Text>
           </View>
 
           {/* OAuth Buttons */}
           <TouchableOpacity
-            style={styles.oauthButton}
+            style={[styles.oauthButton, { backgroundColor: theme === 'dark' ? Colors.white : Colors.lightGray }]}
             onPress={handleGoogleSignUp}
             disabled={isLoading}
             activeOpacity={0.8}
           >
             <View style={styles.oauthButtonInner}>
-              <Ionicons name="logo-google" size={24} color={Colors.primaryText} />
-              <Text style={styles.oauthButtonText}>Continue with Google</Text>
+              <Ionicons name="logo-google" size={24} color={Colors.richBlack} />
+              <Text style={[styles.oauthButtonText, { color: Colors.richBlack }]}>Continue with Google</Text>
             </View>
           </TouchableOpacity>
 
           {/* Divider */}
           <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
+            <View style={[styles.dividerLine, { backgroundColor: Colors.glassBorder }]} />
+            <Text style={[styles.dividerText, { color: Colors.tertiaryText }]}>or sign up with email</Text>
+            <View style={[styles.dividerLine, { backgroundColor: Colors.glassBorder }]} />
           </View>
 
           {/* Email Form */}
           <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color={Colors.mediumGray} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={Colors.mediumGray}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                editable={!isLoading}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color={Colors.mediumGray} />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor={Colors.mediumGray}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                editable={!isLoading}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={Colors.mediumGray}
+            <GlassCard noPadding style={styles.glassInput}>
+              <View style={styles.inputContent}>
+                <Ionicons name="mail-outline" size={20} color={Colors.tertiaryText} />
+                <TextInput
+                  style={[styles.input, { color: Colors.primaryText }]}
+                  placeholder="Email"
+                  placeholderTextColor={Colors.tertiaryText}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!isLoading}
                 />
-              </TouchableOpacity>
-            </View>
+              </View>
+            </GlassCard>
 
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color={Colors.mediumGray} />
-              <TextInput
-                style={styles.input}
-                placeholder="Confirm Password"
-                placeholderTextColor={Colors.mediumGray}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showPassword}
-                editable={!isLoading}
-              />
-            </View>
+            <GlassCard noPadding style={styles.glassInput}>
+              <View style={styles.inputContent}>
+                <Ionicons name="lock-closed-outline" size={20} color={Colors.tertiaryText} />
+                <TextInput
+                  style={[styles.input, { color: Colors.primaryText }]}
+                  placeholder="Password"
+                  placeholderTextColor={Colors.tertiaryText}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  editable={!isLoading}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={Colors.tertiaryText}
+                  />
+                </TouchableOpacity>
+              </View>
+            </GlassCard>
+
+            <GlassCard noPadding style={styles.glassInput}>
+              <View style={styles.inputContent}>
+                <Ionicons name="lock-closed-outline" size={20} color={Colors.tertiaryText} />
+                <TextInput
+                  style={[styles.input, { color: Colors.primaryText }]}
+                  placeholder="Confirm Password"
+                  placeholderTextColor={Colors.tertiaryText}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showPassword}
+                  editable={!isLoading}
+                />
+              </View>
+            </GlassCard>
 
             <TouchableOpacity
-              style={styles.signUpButton}
+              style={[
+                styles.signUpButton,
+                Shadows.glow(Colors.radiantMagenta),
+                isLoading && { opacity: 0.7 }
+              ]}
               onPress={handleSignUp}
               disabled={isLoading}
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={[Colors.electricTeal, Colors.vibrantPurple]}
+                colors={Gradients.primary}
                 style={styles.signUpGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Text style={styles.signUpButtonText}>
-                  {isLoading ? 'Creating Account...' : 'Create Account'}
-                </Text>
+                {isLoading ? (
+                  <ActivityIndicator color={Colors.white} />
+                ) : (
+                  <Text style={[styles.signUpButtonText, { color: Colors.white }]}>
+                    Create Account
+                  </Text>
+                )}
               </LinearGradient>
             </TouchableOpacity>
 
-            <Text style={styles.termsText}>
+            <Text style={[styles.termsText, { color: Colors.tertiaryText }]}>
               By signing up, you agree to our Terms of Service and Privacy Policy
             </Text>
           </View>
 
           {/* Sign In Link */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
+            <Text style={[styles.footerText, { color: Colors.secondaryText }]}>Already have an account? </Text>
             <Link href="/(auth)/login" asChild>
               <TouchableOpacity>
-                <Text style={styles.footerLink}>Sign In</Text>
+                <Text style={[styles.footerLink, { color: Colors.electricTeal }]}>Sign In</Text>
               </TouchableOpacity>
             </Link>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -238,33 +303,23 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.xl,
     paddingTop: 80,
     paddingBottom: 40,
   },
   header: {
-    marginBottom: 40,
+    marginBottom: Spacing.xxl,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: Colors.white,
-    marginBottom: 8,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: 16,
-    color: Colors.white,
     opacity: 0.9,
   },
   oauthButton: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.xl,
+    ...Shadows.medium,
   },
   oauthButtonInner: {
     flexDirection: 'row',
@@ -274,71 +329,58 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   oauthButtonText: {
-    fontSize: 16,
+    ...Typography.titleMedium,
     fontWeight: '600',
-    color: Colors.primaryText,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.white,
-    opacity: 0.3,
   },
   dividerText: {
-    color: Colors.white,
-    opacity: 0.8,
     paddingHorizontal: 16,
-    fontSize: 14,
-    fontWeight: '500',
+    ...Typography.labelMedium,
   },
   form: {
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
-  inputContainer: {
+  glassInput: {
+    width: '100%',
+    marginBottom: Spacing.md,
+  },
+  inputContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    marginBottom: 16,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
     gap: 12,
   },
   input: {
     flex: 1,
-    fontSize: 16,
-    color: Colors.primaryText,
-    paddingVertical: 12,
+    ...Typography.bodyLarge,
+    paddingVertical: 0,
+    height: 24,
   },
   signUpButton: {
-    borderRadius: 16,
+    borderRadius: BorderRadius.round,
     overflow: 'hidden',
     marginTop: 8,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    marginBottom: Spacing.md,
   },
   signUpGradient: {
     paddingVertical: 18,
     alignItems: 'center',
   },
   signUpButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.white,
+    ...Typography.titleMedium,
+    fontWeight: '700',
   },
   termsText: {
-    fontSize: 12,
-    color: Colors.white,
-    opacity: 0.7,
+    ...Typography.bodySmall,
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -348,54 +390,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 14,
-    color: Colors.white,
-    opacity: 0.8,
+    ...Typography.bodyMedium,
   },
   footerLink: {
-    fontSize: 14,
-    color: Colors.white,
+    ...Typography.titleMedium,
     fontWeight: 'bold',
   },
   verificationContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: Spacing.xl,
   },
   verificationIcon: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: Colors.white,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   verificationTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: Colors.white,
-    marginBottom: 16,
+    marginBottom: Spacing.md,
     textAlign: 'center',
   },
   verificationText: {
-    fontSize: 16,
-    color: Colors.white,
-    opacity: 0.9,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
+    marginBottom: Spacing.xxl,
   },
   backButton: {
-    backgroundColor: Colors.white,
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
   },
   backButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.electricTeal,
+    ...Typography.titleMedium,
+    fontWeight: '600',
   },
 });

@@ -19,13 +19,15 @@ import { GlassCard } from '@/components/GlassCard';
 import { PressableScale } from '@/components/PressableScale';
 import { EmptyState } from '@/components/EmptyState';
 import { DashboardSkeleton } from '@/components/SkeletonLoader';
+import { WealthPortalCard } from '@/components/WealthPortalCard';
+import { SmartActionBar } from '@/components/SmartActionBar';
+import { BentoGrid } from '@/components/BentoGrid';
 import { ExpenseCategory, Expense } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 
@@ -33,34 +35,36 @@ import { useRouter } from 'expo-router';
 const QUICK_CATEGORIES: {
   key: ExpenseCategory;
   label: string;
-  emoji: string;
+  icon: keyof typeof Ionicons.glyphMap;
   color: string;
   darkColor: string;
 }[] = [
-  { key: 'groceries', label: 'Groceries', emoji: '\uD83D\uDED2', color: '#10B981', darkColor: '#10B981' },
-  { key: 'kids', label: 'Kids', emoji: '\uD83D\uDC76', color: '#A855F7', darkColor: '#A855F7' },
-  { key: 'home', label: 'Home', emoji: '\uD83C\uDFE0', color: '#F59E0B', darkColor: '#F59E0B' },
-  { key: 'self-care', label: 'Self-Care', emoji: '\uD83D\uDC86\u200D\u2640\uFE0F', color: '#EC4899', darkColor: '#EC4899' },
-];
+    { key: 'groceries', label: 'Groceries', icon: 'cart', color: '#10B981', darkColor: '#10B981' },
+    { key: 'kids', label: 'Kids', icon: 'happy', color: '#A855F7', darkColor: '#A855F7' },
+    { key: 'home', label: 'Home', icon: 'home', color: '#F59E0B', darkColor: '#F59E0B' },
+    { key: 'self-care', label: 'Self-Care', icon: 'heart', color: '#EC4899', darkColor: '#EC4899' },
+    { key: 'transport', label: 'Transport', icon: 'car', color: '#3B82F6', darkColor: '#3B82F6' },
+    { key: 'dining', label: 'Dining', icon: 'restaurant', color: '#EF4444', darkColor: '#EF4444' },
+  ];
 
 // ─── All Categories for Modal ────────────────────────────────────────────────
 const ALL_CATEGORIES: {
   key: ExpenseCategory;
   label: string;
-  emoji: string;
+  icon: keyof typeof Ionicons.glyphMap;
   color: string;
 }[] = [
-  { key: 'groceries', label: 'Groceries', emoji: '\uD83D\uDED2', color: '#10B981' },
-  { key: 'kids', label: 'Kids', emoji: '\uD83D\uDC76', color: '#A855F7' },
-  { key: 'home', label: 'Home', emoji: '\uD83C\uDFE0', color: '#F59E0B' },
-  { key: 'self-care', label: 'Self-Care', emoji: '\uD83D\uDC86\u200D\u2640\uFE0F', color: '#EC4899' },
-  { key: 'transport', label: 'Transport', emoji: '\uD83D\uDE97', color: '#3B82F6' },
-  { key: 'dining', label: 'Dining', emoji: '\uD83C\uDF7D\uFE0F', color: '#EF4444' },
-  { key: 'entertainment', label: 'Fun', emoji: '\uD83C\uDFAC', color: '#8B5CF6' },
-  { key: 'health', label: 'Health', emoji: '\uD83D\uDC8A', color: '#14B8A6' },
-  { key: 'education', label: 'Education', emoji: '\uD83D\uDCDA', color: '#6366F1' },
-  { key: 'other', label: 'Other', emoji: '\uD83D\uDCCC', color: '#6B7280' },
-];
+    { key: 'groceries', label: 'Groceries', icon: 'cart', color: '#10B981' },
+    { key: 'kids', label: 'Kids', icon: 'happy', color: '#A855F7' },
+    { key: 'home', label: 'Home', icon: 'home', color: '#F59E0B' },
+    { key: 'self-care', label: 'Self-Care', icon: 'heart', color: '#EC4899' },
+    { key: 'transport', label: 'Transport', icon: 'car', color: '#3B82F6' },
+    { key: 'dining', label: 'Dining', icon: 'restaurant', color: '#EF4444' },
+    { key: 'entertainment', label: 'Fun', icon: 'game-controller', color: '#8B5CF6' },
+    { key: 'health', label: 'Health', icon: 'medkit', color: '#14B8A6' },
+    { key: 'education', label: 'Education', icon: 'school', color: '#6366F1' },
+    { key: 'other', label: 'Other', icon: 'pricetag', color: '#6B7280' },
+  ];
 
 // ─── Currency Formatter ──────────────────────────────────────────────────────
 const formatCurrency = (currency: string, value: number): string => {
@@ -74,146 +78,6 @@ const getGreeting = (): string => {
   if (hour < 18) return 'Good Afternoon';
   return 'Good Evening';
 };
-
-// ─── Wellness Score Ring ─────────────────────────────────────────────────────
-function WellnessRing({
-  score,
-  size = 100,
-  strokeWidth = 8,
-}: {
-  score: number;
-  size?: number;
-  strokeWidth?: number;
-}) {
-  const animatedValue = useRef(new Animated.Value(0)).current;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const clampedScore = Math.max(0, Math.min(score, 100));
-
-  useEffect(() => {
-    Animated.timing(animatedValue, {
-      toValue: clampedScore,
-      duration: 1200,
-      useNativeDriver: false,
-    }).start();
-  }, [clampedScore, animatedValue]);
-
-  const strokeDashoffset = circumference - (circumference * clampedScore) / 100;
-
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <Defs>
-          <SvgGradient id="wellnessGrad" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0%" stopColor="#2DD4BF" />
-            <Stop offset="50%" stopColor="#A855F7" />
-            <Stop offset="100%" stopColor="#EC4899" />
-          </SvgGradient>
-        </Defs>
-        {/* Background track */}
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth={strokeWidth}
-          fill="none"
-        />
-        {/* Progress arc */}
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="url(#wellnessGrad)"
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeDasharray={`${circumference}`}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          rotation="-90"
-          origin={`${size / 2}, ${size / 2}`}
-        />
-      </Svg>
-      <View style={StyleSheet.absoluteFill as any}>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={styles.wellnessScoreValue}>{clampedScore}</Text>
-          <Text style={styles.wellnessScoreLabel}>Score</Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// ─── Animated Progress Bar ───────────────────────────────────────────────────
-function AnimatedProgressBar({
-  percentage,
-  isUnderBudget,
-  colors,
-  gradients,
-  isDark,
-}: {
-  percentage: number;
-  isUnderBudget: boolean;
-  colors: ReturnType<typeof getThemeColors>;
-  gradients: ReturnType<typeof getGradients>;
-  isDark: boolean;
-}) {
-  const widthAnim = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    Animated.timing(widthAnim, {
-      toValue: Math.min(percentage, 100),
-      duration: 800,
-      useNativeDriver: false,
-    }).start();
-  }, [percentage, widthAnim]);
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 0.8, duration: 1500, useNativeDriver: false }),
-        Animated.timing(glowAnim, { toValue: 0.4, duration: 1500, useNativeDriver: false }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [glowAnim]);
-
-  const animatedWidth = widthAnim.interpolate({
-    inputRange: [0, 100],
-    outputRange: ['0%', '100%'],
-  });
-
-  return (
-    <View style={[
-      styles.progressBarContainer,
-      { backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : colors.lightCream },
-    ]}>
-      <Animated.View
-        style={[
-          styles.progressBarGlow,
-          {
-            width: animatedWidth as any,
-            shadowColor: isUnderBudget ? colors.electricTeal : colors.radiantMagenta,
-            shadowOpacity: glowAnim,
-          },
-        ]}
-      >
-        <LinearGradient
-          colors={
-            !isUnderBudget
-              ? [colors.radiantMagenta, colors.sunKissedAmber]
-              : gradients.neonBar
-          }
-          style={styles.progressBarFill}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-        />
-      </Animated.View>
-    </View>
-  );
-}
 
 // =============================================================================
 // HOME SCREEN COMPONENT
@@ -334,9 +198,6 @@ export default function HomeScreen() {
   const todayRemaining = todayEffectiveLimit - todayTotalSpent;
   const tomorrowForecast = rolloverState?.tomorrowForecast ?? dailyAllowance;
   const isUnderBudget = todayTotalSpent <= todayEffectiveLimit;
-  const spendingPercentage = todayEffectiveLimit > 0
-    ? Math.min((todayTotalSpent / todayEffectiveLimit) * 100, 100)
-    : 0;
   const burnRate = todayEffectiveLimit > 0
     ? Math.round((todayTotalSpent / todayEffectiveLimit) * 100)
     : 0;
@@ -420,19 +281,20 @@ export default function HomeScreen() {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }, 100);
 
-    // Navigate to coach chat
     router.push('/coach-chat');
   }, [router]);
 
-  const getStreakLabel = (): string => {
-    if (momentumStreak === 0) return 'Start your streak!';
-    if (momentumStreak === 1) return 'Day';
-    return 'Days';
+  const getDailyWinMessage = (): string => {
+    const remaining = todayRemaining;
+    if (remaining >= todayEffectiveLimit * 0.5) return 'Crushing it! Over 50% remaining!';
+    if (remaining >= todayEffectiveLimit * 0.25) return 'Looking great! Staying disciplined.';
+    if (remaining > 0) return 'Under budget! Keep the momentum.';
+    return '';
   };
 
-  const getCategoryEmoji = (category: string): string => {
+  const getCategoryIcon = (category: string): keyof typeof Ionicons.glyphMap => {
     const found = ALL_CATEGORIES.find((c) => c.key === category);
-    return found?.emoji || '\uD83D\uDCCC';
+    return found?.icon || 'pricetag';
   };
 
   const getCategoryLabel = (category: string): string => {
@@ -452,14 +314,6 @@ export default function HomeScreen() {
     } catch {
       return '';
     }
-  };
-
-  const getDailyWinMessage = (): string => {
-    const remaining = todayRemaining;
-    if (remaining >= todayEffectiveLimit * 0.5) return 'Crushing it! Over 50% remaining!';
-    if (remaining >= todayEffectiveLimit * 0.25) return 'Looking great! Staying disciplined.';
-    if (remaining > 0) return 'Under budget! Keep the momentum.';
-    return '';
   };
 
   // ─── Loading State ─────────────────────────────────────────────────────────
@@ -489,7 +343,7 @@ export default function HomeScreen() {
             onPress={handleRefresh}
             style={[styles.retryButton, { backgroundColor: Colors.electricTeal }]}
           >
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.coachButtonText}>DIY Coach</Text>
           </PressableScale>
         </View>
       </LinearGradient>
@@ -498,7 +352,7 @@ export default function HomeScreen() {
 
   // ─── Main Render ───────────────────────────────────────────────────────────
   return (
-    <LinearGradient colors={Gradients.background} style={styles.container}>
+    <LinearGradient colors={Gradients.mesh} style={styles.container} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
@@ -518,7 +372,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={[styles.headerBrand, { color: Colors.electricTeal }]}>
-              Grit: Mom-Boss Edition
+              Grit
             </Text>
             <Text style={[styles.greeting, { color: Colors.primaryText }]}>
               {getGreeting()}, {profile?.name || 'Boss'}
@@ -546,111 +400,37 @@ export default function HomeScreen() {
           </PressableScale>
         </View>
 
-        {/* ════════ HERO: SPENDABLE TODAY + WELLNESS RING ════════ */}
+        {/* ════════ HERO: WEALTH PORTAL CARD ════════ */}
         <Animated.View style={{ opacity: heroOpacityAnim, transform: [{ scale: heroScaleAnim }] }}>
-          <GlassCard animated delay={0} style={styles.heroCard}>
-            <View style={styles.heroContent}>
-              {/* Left side - Spendable Amount */}
-              <View style={styles.heroLeft}>
-                <Text style={[styles.heroLabel, { color: Colors.tertiaryText }]}>
-                  Spendable Today
-                </Text>
-                <Text style={[
-                  styles.heroAmount,
-                  {
-                    color: isUnderBudget ? Colors.electricTeal : Colors.radiantMagenta,
-                  },
-                ]}>
-                  {formatCurrency(currency, Math.max(spendableToday, 0))}
-                </Text>
-                <Text style={[styles.heroDate, { color: Colors.tertiaryText }]}>
-                  {new Date().toLocaleDateString('en-GB', {
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'short',
-                  })}
-                </Text>
-
-                {/* Rollover badge */}
-                {rolloverState && rolloverState.todayEntry.rolloverFromPrevious !== 0 && (
-                  <View style={[
-                    styles.rolloverBadge,
-                    {
-                      backgroundColor: rolloverState.todayEntry.rolloverFromPrevious > 0
-                        ? (isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.08)')
-                        : (isDark ? 'rgba(225, 29, 72, 0.12)' : 'rgba(225, 29, 72, 0.08)'),
-                    },
-                  ]}>
-                    <Ionicons
-                      name={rolloverState.todayEntry.rolloverFromPrevious > 0 ? 'arrow-up-circle' : 'arrow-down-circle'}
-                      size={14}
-                      color={rolloverState.todayEntry.rolloverFromPrevious > 0 ? Colors.glowingGreen : Colors.radiantMagenta}
-                    />
-                    <Text style={[
-                      styles.rolloverText,
-                      { color: rolloverState.todayEntry.rolloverFromPrevious > 0 ? Colors.glowingGreen : Colors.radiantMagenta },
-                    ]}>
-                      {rolloverState.todayEntry.rolloverFromPrevious > 0 ? '+' : '-'}
-                      {formatCurrency(currency, rolloverState.todayEntry.rolloverFromPrevious)} rollover
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Right side - Wellness Ring */}
-              <View style={styles.heroRight}>
-                <WellnessRing score={wellnessScore} size={100} strokeWidth={8} />
-                <Text style={[styles.wellnessLabel, { color: Colors.tertiaryText }]}>
-                  Wellness
-                </Text>
-              </View>
-            </View>
-
-            {/* Neon Glow Progress Bar */}
-            <View style={styles.progressSection}>
-              <View style={styles.progressLabels}>
-                <Text style={[styles.progressLabelText, { color: Colors.tertiaryText }]}>
-                  Spent: {formatCurrency(currency, todayTotalSpent)}
-                </Text>
-                <Text style={[styles.progressLabelText, { color: Colors.tertiaryText }]}>
-                  Limit: {formatCurrency(currency, todayEffectiveLimit)}
-                </Text>
-              </View>
-              <AnimatedProgressBar
-                percentage={spendingPercentage}
-                isUnderBudget={isUnderBudget}
-                colors={Colors}
-                gradients={Gradients}
-                isDark={isDark}
-              />
-            </View>
-
-            {/* Status Message */}
-            <View style={styles.dailyStatusContainer}>
-              {isUnderBudget ? (
-                <View style={styles.dailyStatusRow}>
-                  <Ionicons name="checkmark-circle" size={16} color={Colors.glowingGreen} />
-                  <Text style={[styles.dailyStatusText, { color: Colors.glowingGreen }]}>
-                    {formatCurrency(currency, todayRemaining)} remaining today
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.dailyStatusRow}>
-                  <Ionicons name="alert-circle" size={16} color={Colors.radiantMagenta} />
-                  <Text style={[styles.dailyStatusText, { color: Colors.radiantMagenta }]}>
-                    {formatCurrency(currency, Math.abs(todayRemaining))} over budget
-                  </Text>
-                </View>
-              )}
-            </View>
-          </GlassCard>
+          <WealthPortalCard
+            spendableToday={spendableToday}
+            totalLimit={todayEffectiveLimit}
+            currency={currency}
+          />
         </Animated.View>
 
-        {/* ════════ DAILY WIN ════════ */}
+        {/* ════════ ACTION BAR: QUICK LOG & CTA ════════ */}
+        <SmartActionBar
+          categories={QUICK_CATEGORIES}
+          onLogPress={() => handleOpenLogModal()}
+          onCategoryPress={(key) => handleOpenLogModal(key as any)}
+        />
+
+        {/* ════════ BENTO GRID: STATS ════════ */}
+        <BentoGrid
+          streakDays={momentumStreak}
+          burnRate={burnRate}
+          forecast={tomorrowForecast}
+          currency={currency}
+        />
+
+        {/* ════════ DAILY WIN (Celebration) ════════ */}
         {isUnderBudget && todayTotalSpent > 0 && (
           <Animated.View style={{
             opacity: dailyWinAnim,
             transform: [{ scale: dailyWinAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }],
+            marginTop: -Spacing.md, // Pull up closer to grid
+            marginBottom: Spacing.lg
           }}>
             <GlassCard animated delay={100} style={styles.dailyWinCard}>
               <LinearGradient
@@ -658,7 +438,7 @@ export default function HomeScreen() {
                 style={styles.dailyWinGradient}
               >
                 <View style={styles.dailyWinContent}>
-                  <Text style={styles.dailyWinEmoji}>{'\u2B50'}</Text>
+                  <Ionicons name="star" size={28} color={Colors.sunKissedAmber} />
                   <View style={styles.dailyWinTextContainer}>
                     <Text style={[styles.dailyWinTitle, { color: Colors.glowingGreen }]}>
                       Daily Win!
@@ -675,163 +455,6 @@ export default function HomeScreen() {
             </GlassCard>
           </Animated.View>
         )}
-
-        {/* ════════ QUICK-LOG CATEGORIES ════════ */}
-        <View style={styles.quickLogSection}>
-          <Text style={[styles.sectionTitle, { color: Colors.primaryText }]}>Quick Log</Text>
-          <View style={styles.quickLogRow}>
-            {QUICK_CATEGORIES.map((cat) => (
-              <PressableScale
-                key={cat.key}
-                onPress={() => handleOpenLogModal(cat.key)}
-                style={styles.quickLogItem}
-                scaleValue={0.93}
-              >
-                <LinearGradient
-                  colors={[cat.color + '20', cat.color + '08']}
-                  style={[
-                    styles.quickLogIconWrap,
-                    { borderColor: cat.color + '30' },
-                  ]}
-                >
-                  <Text style={styles.quickLogEmoji}>{cat.emoji}</Text>
-                </LinearGradient>
-                <Text style={[styles.quickLogLabel, { color: Colors.secondaryText }]} numberOfLines={1}>
-                  {cat.label}
-                </Text>
-              </PressableScale>
-            ))}
-          </View>
-        </View>
-
-        {/* ════════ LOG SPENDING CTA ════════ */}
-        <PressableScale
-          onPress={() => handleOpenLogModal()}
-          style={styles.logSpendingButton}
-          scaleValue={0.96}
-        >
-          <LinearGradient
-            colors={isDark ? [Colors.electricTeal, Colors.amethyst] : [Colors.electricTeal, Colors.glowingGreen]}
-            style={styles.logSpendingGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            <Ionicons name="add-circle-outline" size={24} color="#FFFFFF" />
-            <Text style={styles.logSpendingText}>Log Spending</Text>
-          </LinearGradient>
-        </PressableScale>
-
-        {/* ════════ BURN RATE + TOMORROW FORECAST ROW ════════ */}
-        <View style={styles.metricsRow}>
-          <GlassCard animated delay={200} style={styles.metricCard}>
-            <View style={[styles.metricIconBg, { backgroundColor: isDark ? 'rgba(225, 29, 72, 0.15)' : '#E11D4815' }]}>
-              <Ionicons name="speedometer-outline" size={20} color={Colors.radiantMagenta} />
-            </View>
-            <Text style={[styles.metricValue, { color: Colors.primaryText }]}>
-              {burnRate}%
-            </Text>
-            <Text style={[styles.metricLabel, { color: Colors.tertiaryText }]}>Burn Rate</Text>
-          </GlassCard>
-
-          <GlassCard animated delay={300} style={styles.metricCard}>
-            <View style={[styles.metricIconBg, { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.15)' : '#A855F715' }]}>
-              <Ionicons name="telescope-outline" size={20} color={Colors.amethyst} />
-            </View>
-            <Text style={[styles.metricValue, { color: Colors.primaryText }]}>
-              {formatCurrency(currency, tomorrowForecast)}
-            </Text>
-            <Text style={[styles.metricLabel, { color: Colors.tertiaryText }]}>Tomorrow</Text>
-          </GlassCard>
-        </View>
-
-        {/* ════════ MOMENTUM STREAK ════════ */}
-        <GlassCard animated delay={400} style={styles.momentumStreakCard}>
-          <View style={styles.momentumStreakContent}>
-            <View style={styles.momentumStreakLeft}>
-              <View style={[
-                styles.streakIconWrap,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(245, 158, 11, 0.12)'
-                    : 'rgba(245, 158, 11, 0.08)',
-                },
-              ]}>
-                <Text style={styles.streakEmoji}>{'\uD83D\uDD25'}</Text>
-              </View>
-              <View style={styles.momentumStreakInfo}>
-                <Text style={[styles.momentumStreakTitle, { color: Colors.primaryText }]}>
-                  Momentum Streak
-                </Text>
-                <Text style={[styles.momentumStreakSubtitle, { color: Colors.tertiaryText }]}>
-                  {momentumStreak > 0
-                    ? 'Consecutive days under budget'
-                    : 'Stay under budget to start!'
-                  }
-                </Text>
-              </View>
-            </View>
-            <View style={styles.momentumStreakRight}>
-              <Text style={[styles.momentumStreakValue, {
-                color: momentumStreak > 0
-                  ? (isDark ? Colors.sunKissedAmber : Colors.radiantMagenta)
-                  : Colors.tertiaryText,
-              }]}>
-                {momentumStreak}
-              </Text>
-              <Text style={[styles.momentumStreakLabel, { color: Colors.tertiaryText }]}>
-                {getStreakLabel()}
-              </Text>
-            </View>
-          </View>
-
-          {/* Streak Progress Dots */}
-          {momentumStreak > 0 && (
-            <View style={[styles.streakDotsContainer, { borderTopColor: Colors.glassBorder }]}>
-              {Array.from({ length: Math.min(momentumStreak, 7) }).map((_, i) => (
-                <LinearGradient
-                  key={`dot-${i}`}
-                  colors={['#F59E0B', '#E11D48']}
-                  style={styles.streakDot}
-                />
-              ))}
-              {momentumStreak > 7 && (
-                <Text style={[styles.streakDotsMore, { color: Colors.sunKissedAmber }]}>
-                  +{momentumStreak - 7}
-                </Text>
-              )}
-            </View>
-          )}
-        </GlassCard>
-
-        {/* ════════ TOMORROW FORECAST SECTION ════════ */}
-        <GlassCard animated delay={450} style={styles.forecastCard}>
-          <View style={styles.forecastContent}>
-            <View style={styles.forecastLeft}>
-              <View style={[
-                styles.forecastIconWrap,
-                { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.12)' : 'rgba(168, 85, 247, 0.08)' },
-              ]}>
-                <Ionicons name="sunny-outline" size={22} color={Colors.amethyst} />
-              </View>
-              <View style={styles.forecastInfo}>
-                <Text style={[styles.forecastTitle, { color: Colors.primaryText }]}>
-                  Tomorrow&apos;s Forecast
-                </Text>
-                <Text style={[styles.forecastSubtitle, { color: Colors.tertiaryText }]}>
-                  {isUnderBudget
-                    ? 'Your savings roll over!'
-                    : 'Overage will reduce tomorrow'
-                  }
-                </Text>
-              </View>
-            </View>
-            <Text style={[styles.forecastAmount, {
-              color: tomorrowForecast >= dailyAllowance ? Colors.electricTeal : Colors.sunKissedAmber,
-            }]}>
-              {formatCurrency(currency, tomorrowForecast)}
-            </Text>
-          </View>
-        </GlassCard>
 
         {/* ════════ TODAY'S TRANSACTIONS FEED ════════ */}
         <View style={styles.transactionSection}>
@@ -854,7 +477,7 @@ export default function HomeScreen() {
                 icon="receipt-outline"
                 iconColor={Colors.electricTeal}
                 title="No Expenses Yet"
-                description="Tap 'Log Spending' or use Quick Log to track your first expense today."
+                description="Tap 'Log' above or use Quick Action to track your first expense today."
                 actionLabel="Log First Expense"
                 onAction={() => handleOpenLogModal()}
                 gradientColors={[Colors.electricTeal, Colors.glowingGreen]}
@@ -872,7 +495,7 @@ export default function HomeScreen() {
                           styles.transactionIconWrap,
                           { backgroundColor: getCategoryColor(expense.category) + '18' },
                         ]}>
-                          <Text style={styles.transactionEmoji}>{getCategoryEmoji(expense.category)}</Text>
+                          <Ionicons name={getCategoryIcon(expense.category)} size={20} color={getCategoryColor(expense.category)} />
                         </View>
                         <View style={styles.transactionDetails}>
                           <Text style={[styles.transactionName, { color: Colors.primaryText }]} numberOfLines={1}>
@@ -910,7 +533,7 @@ export default function HomeScreen() {
       {/* ════════ LOG SPENDING MODAL ════════ */}
       <Modal
         visible={showLogModal}
-        animationType="slide"
+        animationType="fade"
         transparent
         onRequestClose={() => setShowLogModal(false)}
       >
@@ -919,70 +542,37 @@ export default function HomeScreen() {
           style={styles.modalOverlay}
         >
           <View style={styles.modalOverlay}>
+            {/* 100% Blur Background */}
             <PressableScale
               onPress={() => setShowLogModal(false)}
-              style={styles.modalBackdrop}
+              style={StyleSheet.absoluteFill}
               haptic={false}
             >
-              <View />
+              <BlurView intensity={Platform.OS === 'ios' ? 80 : 50} style={StyleSheet.absoluteFill} tint={isDark ? 'dark' : 'light'} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)' }]} />
             </PressableScale>
-            <View style={[
-              styles.modalContent,
-              {
-                backgroundColor: isDark ? Colors.darkPurple : Colors.white,
-                borderColor: Colors.glassBorder,
-                paddingBottom: Math.max(insets.bottom, Spacing.lg),
-              },
-            ]}>
-              <View style={[styles.modalHandle, { backgroundColor: Colors.tertiaryText }]} />
 
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>Log Spending</Text>
-                <PressableScale onPress={() => setShowLogModal(false)}>
-                  <Ionicons name="close-circle" size={28} color={Colors.tertiaryText} />
-                </PressableScale>
-              </View>
-
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                {/* Current Status Card */}
-                <View style={[styles.logStatusCard, {
-                  backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
-                  borderColor: Colors.glassBorder,
-                }]}>
-                  <View style={styles.logStatusRow}>
-                    <Text style={[styles.logStatusLabel, { color: Colors.tertiaryText }]}>Today&apos;s Limit</Text>
-                    <Text style={[styles.logStatusValue, { color: Colors.electricTeal }]}>
-                      {formatCurrency(currency, todayEffectiveLimit)}
-                    </Text>
-                  </View>
-                  <View style={styles.logStatusRow}>
-                    <Text style={[styles.logStatusLabel, { color: Colors.tertiaryText }]}>Already Spent</Text>
-                    <Text style={[styles.logStatusValue, { color: Colors.primaryText }]}>
-                      {formatCurrency(currency, todayTotalSpent)}
-                    </Text>
-                  </View>
-                  <View style={[styles.logStatusDivider, { backgroundColor: Colors.glassBorder }]} />
-                  <View style={styles.logStatusRow}>
-                    <Text style={[styles.logStatusLabelBold, { color: Colors.primaryText }]}>Remaining</Text>
-                    <Text style={[styles.logStatusValueBold, {
-                      color: isUnderBudget ? Colors.glowingGreen : Colors.radiantMagenta,
-                    }]}>
-                      {isUnderBudget ? '' : '-'}{formatCurrency(currency, todayRemaining)}
-                    </Text>
-                  </View>
+            <Animated.View style={styles.modalContent}>
+              <GlassCard style={[styles.modalCard, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)' }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, { color: Colors.primaryText }]}>
+                    Log Expense
+                  </Text>
+                  <PressableScale
+                    onPress={() => setShowLogModal(false)}
+                    style={[styles.closeButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+                  >
+                    <Ionicons name="close" size={20} color={Colors.secondaryText} />
+                  </PressableScale>
                 </View>
 
                 {/* Amount Input */}
-                <Text style={[styles.inputLabel, { color: Colors.primaryText }]}>Amount</Text>
-                <View style={[styles.amountInputField, {
-                  backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
-                  borderColor: Colors.glassBorder,
-                }]}>
-                  <Text style={[styles.currencySymbol, { color: Colors.electricTeal }]}>{currency}</Text>
+                <View style={styles.inputContainer}>
+                  <Text style={[styles.currencyPrefix, { color: Colors.electricTeal }]}>{currency}</Text>
                   <TextInput
                     style={[styles.amountInput, { color: Colors.primaryText }]}
                     placeholder="0.00"
-                    placeholderTextColor={Colors.mediumGray}
+                    placeholderTextColor={Colors.tertiaryText}
                     keyboardType="decimal-pad"
                     value={spendingAmount}
                     onChangeText={setSpendingAmount}
@@ -991,104 +581,71 @@ export default function HomeScreen() {
                 </View>
 
                 {/* Category Selection */}
-                <Text style={[styles.inputLabel, { color: Colors.primaryText, marginTop: Spacing.lg }]}>Category</Text>
-                <View style={styles.categoryGrid}>
+                <Text style={[styles.inputLabel, { color: Colors.secondaryText }]}>Category</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
                   {ALL_CATEGORIES.map((cat) => (
                     <PressableScale
                       key={cat.key}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSelectedCategory(cat.key);
-                      }}
+                      onPress={() => setSelectedCategory(cat.key)}
                       style={[
                         styles.categoryChip,
-                        {
-                          backgroundColor: selectedCategory === cat.key
-                            ? cat.color + '20'
-                            : (isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream),
-                          borderColor: selectedCategory === cat.key
-                            ? cat.color
-                            : Colors.glassBorder,
-                        },
+                        selectedCategory === cat.key && { backgroundColor: cat.color + '20', borderColor: cat.color },
+                        { borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }
                       ]}
-                      scaleValue={0.93}
                     >
-                      <Text style={styles.categoryChipEmoji}>{cat.emoji}</Text>
-                      <Text style={[
-                        styles.categoryChipLabel,
-                        {
-                          color: selectedCategory === cat.key
-                            ? cat.color
-                            : Colors.secondaryText,
-                        },
-                      ]}>
+                      <Ionicons
+                        name={cat.icon}
+                        size={16}
+                        color={selectedCategory === cat.key ? cat.color : Colors.tertiaryText}
+                      />
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          { color: selectedCategory === cat.key ? cat.color : Colors.secondaryText }
+                        ]}
+                      >
                         {cat.label}
                       </Text>
                     </PressableScale>
                   ))}
-                </View>
+                </ScrollView>
 
                 {/* Description Input */}
-                <Text style={[styles.inputLabel, { color: Colors.primaryText, marginTop: Spacing.lg }]}>
-                  Description (optional)
+                <Text style={[styles.inputLabel, { color: Colors.secondaryText, marginTop: Spacing.md }]}>
+                  Note (Optional)
                 </Text>
                 <TextInput
-                  style={[styles.descriptionInput, {
-                    backgroundColor: isDark ? 'rgba(45, 27, 61, 0.6)' : Colors.lightCream,
-                    borderColor: Colors.glassBorder,
-                    color: Colors.primaryText,
-                  }]}
-                  placeholder="e.g., Weekly shop at Tesco"
-                  placeholderTextColor={Colors.mediumGray}
+                  style={[
+                    styles.descriptionInput,
+                    {
+                      backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.03)',
+                      color: Colors.primaryText,
+                      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'
+                    }
+                  ]}
+                  placeholder="What's this for?"
+                  placeholderTextColor={Colors.tertiaryText}
                   value={spendingDescription}
                   onChangeText={setSpendingDescription}
-                  maxLength={100}
                 />
 
-                {/* Spending Preview */}
-                {spendingAmount && parseFloat(spendingAmount) > 0 && (
-                  <View style={[styles.spendingPreview, {
-                    backgroundColor: isDark ? 'rgba(45, 27, 61, 0.4)' : Colors.lightCream + '80',
-                    borderColor: Colors.glassBorder,
-                  }]}>
-                    <Ionicons
-                      name={parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? 'checkmark-circle' : 'warning'}
-                      size={18}
-                      color={parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? Colors.glowingGreen : Colors.sunKissedAmber}
-                    />
-                    <Text style={[styles.spendingPreviewText, {
-                      color: parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit ? Colors.glowingGreen : Colors.sunKissedAmber,
-                    }]}>
-                      {parseFloat(spendingAmount) + todayTotalSpent <= todayEffectiveLimit
-                        ? `Still under budget \u2014 ${formatCurrency(currency, todayRemaining - parseFloat(spendingAmount))} left`
-                        : `Over budget by ${formatCurrency(currency, parseFloat(spendingAmount) + todayTotalSpent - todayEffectiveLimit)}`
-                      }
-                    </Text>
-                  </View>
-                )}
-              </ScrollView>
-
-              {/* Submit Button */}
-              <PressableScale
-                onPress={handleLogSpending}
-                style={styles.saveButton}
-                scaleValue={0.97}
-                disabled={isSubmitting}
-              >
-                <LinearGradient
-                  colors={[Colors.electricTeal, Colors.glowingGreen]}
-                  style={styles.saveButtonGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
+                {/* Submit Button */}
+                <PressableScale
+                  onPress={handleLogSpending}
+                  disabled={isSubmitting}
+                  style={[
+                    styles.submitButton,
+                    { backgroundColor: Colors.electricTeal, opacity: isSubmitting ? 0.7 : 1 }
+                  ]}
                 >
                   {isSubmitting ? (
-                    <Text style={styles.saveButtonText}>Saving...</Text>
+                    <Text style={styles.submitButtonText}>Logging...</Text>
                   ) : (
-                    <Text style={styles.saveButtonText}>Log Spending</Text>
+                    <Text style={styles.submitButtonText}>Log Expense</Text>
                   )}
-                </LinearGradient>
-              </PressableScale>
-            </View>
+                </PressableScale>
+              </GlassCard>
+            </Animated.View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -1096,55 +653,63 @@ export default function HomeScreen() {
       {/* ════════ FLOATING AI COACH BUTTON ════════ */}
       <Animated.View
         style={[
-          styles.floatingCoachButton,
+          styles.floatingCoachButtonContainer, // New style for positioning
           {
             bottom: insets.bottom + 100,
-            transform: [{ scale: coachButtonPulse }],
-            shadowColor: Colors.electricTeal,
-            shadowOffset: { width: 0, height: 8 },
-            shadowRadius: 24,
-            shadowOpacity: coachButtonGlow as any,
-            elevation: 12,
+            transform: [{ scale: coachButtonPulse }], // Native Driver Animation
           },
         ]}
         nativeID="floating-coach-icon"
       >
-        <PressableScale onPress={handleOpenCoach} scaleValue={0.92}>
-          <BlurView
-            intensity={isDark ? 50 : 30}
-            tint={isDark ? 'dark' : 'light'}
-            style={[
-              styles.floatingCoachBlur,
-              {
-                borderColor: isDark ? 'rgba(45, 212, 191, 0.4)' : 'rgba(20, 184, 166, 0.3)',
-              },
-            ]}
-          >
-            <View
+        <Animated.View
+          style={[
+            styles.floatingCoachButtonShadow, // New style for shadow
+            {
+              shadowColor: Colors.electricTeal,
+              shadowOffset: { width: 0, height: 8 },
+              shadowRadius: 24,
+              shadowOpacity: coachButtonGlow as any, // JS Driver Animation
+              elevation: 12,
+            }
+          ]}
+        >
+          <PressableScale onPress={handleOpenCoach} scaleValue={0.92}>
+            <BlurView
+              intensity={isDark ? 50 : 30}
+              tint={isDark ? 'dark' : 'light'}
               style={[
-                StyleSheet.absoluteFill,
+                styles.floatingCoachBlur,
                 {
-                  backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : 'rgba(255, 255, 255, 0.9)',
-                  borderRadius: 30,
+                  borderColor: isDark ? 'rgba(45, 212, 191, 0.4)' : 'rgba(20, 184, 166, 0.3)',
                 },
               ]}
-            />
-            <LinearGradient
-              colors={
-                isDark
-                  ? ['rgba(45, 212, 191, 0.15)', 'rgba(45, 212, 191, 0.05)']
-                  : ['rgba(20, 184, 166, 0.1)', 'rgba(20, 184, 166, 0.02)']
-              }
-              style={styles.floatingCoachGradient}
             >
-              <Ionicons
-                name="chatbubble-ellipses"
-                size={28}
-                color={isDark ? Colors.white : Colors.silverGrey}
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: 30,
+                  },
+                ]}
               />
-            </LinearGradient>
-          </BlurView>
-        </PressableScale>
+              <LinearGradient
+                colors={
+                  isDark
+                    ? ['rgba(45, 212, 191, 0.15)', 'rgba(45, 212, 191, 0.05)']
+                    : ['rgba(20, 184, 166, 0.1)', 'rgba(20, 184, 166, 0.02)']
+                }
+                style={styles.floatingCoachGradient}
+              >
+                <Ionicons
+                  name="chatbubble-ellipses"
+                  size={28}
+                  color={isDark ? Colors.white : Colors.silverGrey}
+                />
+              </LinearGradient>
+            </BlurView>
+          </PressableScale>
+        </Animated.View>
       </Animated.View>
     </LinearGradient>
   );
@@ -1157,16 +722,167 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  centerContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.xl,
+  },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xxl,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.lg,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  headerBrand: {
+    fontSize: 28,
+    fontFamily: 'Outfit-Bold',
+    letterSpacing: -0.5,
+  },
+  greeting: {
+    fontSize: 15,
+    fontFamily: 'Outfit-Medium',
+    marginTop: 2,
+    opacity: 0.8,
+  },
+  notificationButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.round,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+
+  // Daily Win
+  dailyWinCard: {
+    padding: 0,
+    borderRadius: BorderRadius.xl,
+    overflow: 'hidden',
+    height: 80,
+    justifyContent: 'center',
+  },
+  dailyWinGradient: {
+    flex: 1,
+    paddingHorizontal: Spacing.md,
+    justifyContent: 'center',
+  },
+  dailyWinContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.md,
   },
+  dailyWinTextContainer: {
+    flex: 1,
+  },
+  dailyWinTitle: {
+    fontSize: 16,
+    fontFamily: 'Outfit-Bold',
+    marginBottom: 2,
+  },
+  dailyWinMessage: {
+    fontSize: 13,
+    fontFamily: 'Outfit-Medium',
+  },
+  dailyWinBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Transactions
+  transactionSection: {
+    marginTop: Spacing.lg,
+  },
+  transactionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Outfit-Bold',
+  },
+  transactionCount: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  transactionCountText: {
+    fontSize: 12,
+    fontFamily: 'Outfit-Bold',
+  },
+  transactionList: {
+    gap: Spacing.sm,
+  },
+  transactionCard: {
+    padding: Spacing.md,
+    marginBottom: 0,
+  },
+  transactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  transactionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    flex: 1,
+  },
+  transactionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transactionDetails: {
+    flex: 1,
+  },
+  transactionName: {
+    fontSize: 16,
+    fontFamily: 'Outfit-SemiBold',
+    marginBottom: 2,
+  },
+  transactionMeta: {
+    fontSize: 12,
+    fontFamily: 'Outfit-Medium',
+  },
+  transactionRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  transactionAmount: {
+    fontSize: 16,
+    fontFamily: 'Outfit-Bold',
+  },
+  deleteButton: {
+    padding: 6,
+    borderRadius: 10,
+  },
+
+  // Error State
   errorIconWrap: {
     width: 96,
     height: 96,
@@ -1190,638 +906,132 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.md,
   },
-  retryButtonText: {
+  coachButtonText: {
     color: '#FFFFFF',
-    ...Typography.titleSmall,
+    fontSize: 16,
+    fontFamily: 'Outfit-Bold',
   },
 
-  // ─── Header ────────────────────────────────────────────────────────────────
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  headerBrand: {
-    ...Typography.labelMedium,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: Spacing.xs,
-  },
-  greeting: {
-    ...Typography.headlineLarge,
-  },
-  notificationButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    ...Shadows.soft,
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-
-  // ─── Hero Card ─────────────────────────────────────────────────────────────
-  heroCard: {
-    marginBottom: Spacing.md,
-  },
-  heroContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  heroLeft: {
-    flex: 1,
-    marginRight: Spacing.md,
-  },
-  heroLabel: {
-    ...Typography.labelMedium,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: Spacing.xs,
-  },
-  heroAmount: {
-    fontSize: 40,
-    fontWeight: '800',
-    letterSpacing: -1.5,
-    lineHeight: 48,
-    marginBottom: Spacing.xs,
-  },
-  heroDate: {
-    ...Typography.labelMedium,
-    marginBottom: Spacing.sm,
-  },
-  heroRight: {
-    alignItems: 'center',
-  },
-  wellnessLabel: {
-    ...Typography.labelSmall,
-    marginTop: Spacing.xs,
-  },
-
-  // ─── Wellness Ring ─────────────────────────────────────────────────────────
-  wellnessScoreValue: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-  },
-  wellnessScoreLabel: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.5)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-
-  // ─── Rollover Badge ────────────────────────────────────────────────────────
-  rolloverBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.sm,
-    alignSelf: 'flex-start',
-  },
-  rolloverText: {
-    ...Typography.labelMedium,
-  },
-
-  // ─── Progress Bar ──────────────────────────────────────────────────────────
-  progressSection: {
-    marginTop: Spacing.lg,
-  },
-  progressLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.sm,
-  },
-  progressLabelText: {
-    ...Typography.labelSmall,
-  },
-  progressBarContainer: {
-    height: 12,
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginBottom: Spacing.md,
-  },
-  progressBarGlow: {
-    height: '100%',
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 6,
-  },
-
-  // ─── Status ────────────────────────────────────────────────────────────────
-  dailyStatusContainer: {
-    alignItems: 'flex-start',
-  },
-  dailyStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  dailyStatusText: {
-    ...Typography.titleSmall,
-  },
-
-  // ─── Daily Win ─────────────────────────────────────────────────────────────
-  dailyWinCard: {
-    marginBottom: Spacing.md,
-  },
-  dailyWinGradient: {
-    borderRadius: BorderRadius.lg,
-    margin: -Spacing.lg,
-    padding: Spacing.lg,
-  },
-  dailyWinContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  dailyWinEmoji: {
-    fontSize: 28,
-  },
-  dailyWinTextContainer: {
-    flex: 1,
-  },
-  dailyWinTitle: {
-    ...Typography.titleMedium,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  dailyWinMessage: {
-    ...Typography.bodySmall,
-  },
-  dailyWinBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // ─── Quick Log ─────────────────────────────────────────────────────────────
-  quickLogSection: {
-    marginBottom: Spacing.md,
-  },
-  quickLogRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: Spacing.md,
-    gap: Spacing.sm,
-  },
-  quickLogItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  quickLogIconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  quickLogEmoji: {
-    fontSize: 26,
-  },
-  quickLogLabel: {
-    ...Typography.labelSmall,
-    textAlign: 'center',
-  },
-
-  // ─── Log Spending Button ───────────────────────────────────────────────────
-  logSpendingButton: {
-    borderRadius: BorderRadius.xl,
-    overflow: 'hidden',
-    marginBottom: Spacing.lg,
-    shadowColor: '#14B8A6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  logSpendingGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.md,
-    gap: Spacing.sm,
-  },
-  logSpendingText: {
-    ...Typography.titleMedium,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-
-  // ─── Metrics Row ───────────────────────────────────────────────────────────
-  metricsRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  metricCard: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  metricIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  metricValue: {
-    ...Typography.headlineSmall,
-    marginBottom: Spacing.xs,
-  },
-  metricLabel: {
-    ...Typography.labelMedium,
-  },
-
-  // ─── Momentum Streak ──────────────────────────────────────────────────────
-  momentumStreakCard: {
-    marginBottom: Spacing.lg,
-  },
-  momentumStreakContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  momentumStreakLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    flex: 1,
-  },
-  streakIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  streakEmoji: {
-    fontSize: 28,
-  },
-  momentumStreakInfo: {
-    flex: 1,
-  },
-  momentumStreakTitle: {
-    ...Typography.titleMedium,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  momentumStreakSubtitle: {
-    ...Typography.bodySmall,
-  },
-  momentumStreakRight: {
-    alignItems: 'center',
-    paddingLeft: Spacing.md,
-  },
-  momentumStreakValue: {
-    fontSize: 36,
-    fontWeight: '800',
-    lineHeight: 40,
-    letterSpacing: -1,
-  },
-  momentumStreakLabel: {
-    ...Typography.labelSmall,
-    marginTop: 2,
-  },
-  streakDotsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-  },
-  streakDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  streakDotsMore: {
-    ...Typography.labelMedium,
-    fontWeight: '700',
-    marginLeft: 2,
-  },
-
-  // ─── Tomorrow Forecast ─────────────────────────────────────────────────────
-  forecastCard: {
-    marginBottom: Spacing.lg,
-  },
-  forecastContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  forecastLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    flex: 1,
-  },
-  forecastIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  forecastInfo: {
-    flex: 1,
-  },
-  forecastTitle: {
-    ...Typography.titleMedium,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  forecastSubtitle: {
-    ...Typography.bodySmall,
-  },
-  forecastAmount: {
-    ...Typography.headlineSmall,
-    fontWeight: '700',
-    paddingLeft: Spacing.sm,
-  },
-
-  // ─── Transactions ──────────────────────────────────────────────────────────
-  transactionSection: {
-    marginBottom: Spacing.lg,
-  },
-  transactionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  sectionTitle: {
-    ...Typography.headlineSmall,
-  },
-  transactionCount: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.round,
-    minWidth: 28,
-    alignItems: 'center',
-  },
-  transactionCountText: {
-    ...Typography.labelMedium,
-    fontWeight: '700',
-  },
-  transactionList: {
-    gap: Spacing.sm,
-  },
-  transactionCard: {
-    // No extra margin - gap handled by parent
-  },
-  transactionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  transactionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: Spacing.md,
-  },
-  transactionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  transactionEmoji: {
-    fontSize: 20,
-  },
-  transactionDetails: {
-    flex: 1,
-  },
-  transactionName: {
-    ...Typography.titleSmall,
-    marginBottom: 2,
-  },
-  transactionMeta: {
-    ...Typography.labelSmall,
-  },
-  transactionRight: {
-    alignItems: 'flex-end',
-    gap: Spacing.xs,
-  },
-  transactionAmount: {
-    ...Typography.titleMedium,
-    fontWeight: '700',
-  },
-  deleteButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // ─── Modal ─────────────────────────────────────────────────────────────────
+  // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalBackdrop: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
-    borderTopLeftRadius: BorderRadius.xxl + 8,
-    borderTopRightRadius: BorderRadius.xxl + 8,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    padding: Spacing.lg,
-    maxHeight: '90%',
+    width: '100%',
+    padding: Spacing.md,
   },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: Spacing.md,
-    opacity: 0.4,
+  modalCard: {
+    borderRadius: 24,
+    padding: Spacing.lg,
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: Spacing.lg,
   },
   modalTitle: {
-    ...Typography.headlineMedium,
+    fontSize: 20,
+    fontFamily: 'Outfit-Bold',
   },
-
-  // ─── Log Status Card ───────────────────────────────────────────────────────
-  logStatusCard: {
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    padding: Spacing.md,
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: Spacing.lg,
   },
-  logStatusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  logStatusLabel: {
-    ...Typography.bodyMedium,
-  },
-  logStatusValue: {
-    ...Typography.titleMedium,
-  },
-  logStatusDivider: {
-    height: 1,
-    marginVertical: Spacing.sm,
-  },
-  logStatusLabelBold: {
-    ...Typography.titleSmall,
-    fontWeight: '700',
-  },
-  logStatusValueBold: {
-    ...Typography.titleLarge,
-    fontWeight: '800',
-  },
-
-  // ─── Amount Input ──────────────────────────────────────────────────────────
-  inputLabel: {
-    ...Typography.titleSmall,
-    marginBottom: Spacing.sm,
-  },
-  amountInputField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    paddingHorizontal: Spacing.md,
-  },
-  currencySymbol: {
-    ...Typography.headlineSmall,
-    fontWeight: '700',
-    marginRight: Spacing.sm,
+  currencyPrefix: {
+    fontSize: 32,
+    fontFamily: 'Outfit-Bold',
+    marginRight: 4,
   },
   amountInput: {
-    flex: 1,
-    ...Typography.headlineSmall,
-    fontWeight: '700',
-    paddingVertical: Spacing.md,
+    fontSize: 48,
+    fontFamily: 'Outfit-Bold',
+    minWidth: 100,
   },
-
-  // ─── Category Grid ─────────────────────────────────────────────────────────
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
+  inputLabel: {
+    fontSize: 14,
+    fontFamily: 'Outfit-SemiBold',
+    marginBottom: Spacing.sm,
+  },
+  categoryScroll: {
+    flexGrow: 0,
+    marginBottom: Spacing.md,
   },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.round,
-    borderWidth: 1.5,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginRight: Spacing.sm,
+    gap: 6,
   },
-  categoryChipEmoji: {
-    fontSize: 16,
+  categoryChipText: {
+    fontSize: 14,
+    fontFamily: 'Outfit-SemiBold',
   },
-  categoryChipLabel: {
-    ...Typography.labelMedium,
-  },
-
-  // ─── Description Input ─────────────────────────────────────────────────────
   descriptionInput: {
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
+    height: 50,
+    borderRadius: 16,
     paddingHorizontal: Spacing.md,
-    paddingVertical: 14,
-    ...Typography.bodyLarge,
-  },
-
-  // ─── Spending Preview ──────────────────────────────────────────────────────
-  spendingPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
     borderWidth: 1,
-    marginTop: Spacing.md,
+    fontSize: 16,
+    fontFamily: 'Outfit-Medium',
+    marginBottom: Spacing.xl,
   },
-  spendingPreviewText: {
-    ...Typography.labelLarge,
-    flex: 1,
-  },
-
-  // ─── Save Button ───────────────────────────────────────────────────────────
-  saveButton: {
-    marginTop: Spacing.lg,
-    borderRadius: BorderRadius.xxl,
-    overflow: 'hidden',
-    shadowColor: '#14B8A6',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  saveButtonGradient: {
-    paddingVertical: 18,
+  submitButton: {
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  saveButtonText: {
-    ...Typography.titleLarge,
-    fontWeight: '700',
+  submitButtonText: {
     color: '#FFFFFF',
+    fontSize: 18,
+    fontFamily: 'Outfit-Bold',
   },
 
-  // ─── Floating AI Coach Button ──────────────────────────────────────────────
-  floatingCoachButton: {
+  // Floating Coach
+  floatingCoachButtonContainer: {
     position: 'absolute',
     right: Spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50,
+  },
+  floatingCoachButtonShadow: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    zIndex: 1000,
+    backgroundColor: 'transparent', // Shadow needs background color often but here we use shadow props
+    // Elevation requires background color on Android usually
   },
   floatingCoachBlur: {
     width: 60,
     height: 60,
     borderRadius: 30,
     overflow: 'hidden',
-    borderWidth: 1.5,
+    borderWidth: 1,
   },
   floatingCoachGradient: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 30,
-    justifyContent: 'center',
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
 });

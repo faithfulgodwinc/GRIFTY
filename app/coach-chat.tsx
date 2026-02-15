@@ -10,6 +10,7 @@ import {
   Alert,
   Linking,
   Animated,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PressableScale } from '@/components/PressableScale';
@@ -17,16 +18,16 @@ import { ChatSkeleton } from '@/components/SkeletonLoader';
 import { getThemeColors, getGradients } from '@/constants/Colors';
 import { Typography, Spacing, BorderRadius } from '@/constants/Theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useTextGeneration } from '@fastshot/ai';
+import { generateGeminiResponse } from '@/utils/gemini';
 import * as Haptics from 'expo-haptics';
 import { storage } from '@/utils/storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { useSubscription } from '@/contexts/SubscriptionContext';
-import { GritifyElitePaywall } from '@/components/premium/GritifyElitePaywall';
+import { GritElitePaywall } from '@/components/premium/GritElitePaywall';
 import { usePremiumFeature } from '@/hooks/usePremiumFeature';
 
 interface Message {
@@ -43,19 +44,7 @@ interface YouTubeVideo {
   thumbnail: string;
 }
 
-const QUICK_REPLIES = [
-  { id: '1', text: 'How can I save £50 this week?', icon: '💰' },
-  { id: '2', text: 'Best budget meal ideas?', icon: '🥗' },
-  { id: '3', text: 'Analyze my spending', icon: '📊' },
-  { id: '4', text: 'Tips to boost my streak', icon: '🔥' },
-];
 
-const INITIAL_MESSAGE: Message = {
-  id: '0',
-  text: "Hello! I'm your AI financial P.A. How can I help you save today?",
-  isUser: false,
-  timestamp: new Date(),
-};
 
 // Animated typing dot component
 function TypingDot({ delay }: { delay: number }) {
@@ -89,27 +78,53 @@ const typingStyles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#2DD4BF',
+    backgroundColor: '#2DD4BF', // Colors.electricTeal
     marginHorizontal: 3,
   },
 });
 
 export default function CoachChatScreen() {
-  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
-  const [inputText, setInputText] = useState('');
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const router = useRouter();
-  const { paywall, refreshProfile, isPaywallVisible, hidePaywall } = useSubscription();
+  const { packages, isPaywallVisible, hidePaywall } = useSubscription();
   const { requirePremium } = usePremiumFeature();
 
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
   const Gradients = getGradients(isDark);
 
-  const { generateText, isLoading } = useTextGeneration();
+  // Define config with access to Colors
+  const config = {
+    title: 'DIY Coach',
+    initialMessage: "Hello! I'm your AI financial P.A. How can I help you save today?",
+    emoji: '✨',
+    model: 'gemini-3-flash-preview',
+    gradient: [Colors.electricTeal, Colors.amethyst],
+    avatarColor: Colors.electricTeal,
+    quickReplies: [
+      { id: '1', text: 'How can I save £50 this week?', icon: '💰' },
+      { id: '2', text: 'Best budget meal ideas?', icon: '🥗' },
+      { id: '3', text: 'Analyze my spending', icon: '📊' },
+      { id: '4', text: 'Tips to boost my streak', icon: '🔥' },
+    ],
+  };
+
+  const [messages, setMessages] = useState<Message[]>([{
+    id: '0',
+    text: config.initialMessage,
+    isUser: false,
+    timestamp: new Date(),
+  }]);
+  const [inputText, setInputText] = useState('');
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+
+  const scrollViewRef = useRef<ScrollView>(null);
+  const avatarGlow = useRef(new Animated.Value(0.4)).current;
+  const headerFadeAnim = useRef(new Animated.Value(0)).current;
+
+  const [isGenerating, setIsGenerating] = useState(false);
+  const isLoading = isGenerating; // Alias for compatibility
   const {
     profile,
     financialData,
@@ -120,16 +135,13 @@ export default function CoachChatScreen() {
     wellnessScore,
     todayExpenses,
     monthlySpentSoFar,
+    actions,
   } = useFinancialData();
 
   const currency = profile?.currency || financialData?.currency || '£';
   const monthlyIncome = financialData?.monthlyIncome || profile?.monthlyIncome || 0;
   const savingsGoal = financialData?.savingsGoal || profile?.savingsGoal || 0;
   const todaySpent = todayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-
-  // Avatar glow animation
-  const avatarGlow = useRef(new Animated.Value(0.4)).current;
-  const headerFadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Header entrance animation
@@ -170,7 +182,6 @@ export default function CoachChatScreen() {
       }
     } catch (error) {
       console.error('Failed to load chat history:', error);
-      Alert.alert('Info', 'Starting a fresh conversation');
     } finally {
       setIsLoadingHistory(false);
     }
@@ -190,7 +201,6 @@ export default function CoachChatScreen() {
     }, 100);
   };
 
-  // Load chat history on mount
   useEffect(() => {
     loadChatHistory();
   }, []);
@@ -199,7 +209,6 @@ export default function CoachChatScreen() {
     scrollToBottom();
   }, [messages]);
 
-  // Save chat history whenever messages change
   useEffect(() => {
     if (!isLoadingHistory && messages.length > 1) {
       saveChatHistory();
@@ -209,8 +218,7 @@ export default function CoachChatScreen() {
   const generateYouTubeRecommendations = (query: string): YouTubeVideo[] => {
     const searchQuery = query.replace(/[?]/g, '').trim();
     const encodedQuery = encodeURIComponent(`${searchQuery} tutorial how to`);
-
-    const videos: YouTubeVideo[] = [
+    return [
       {
         title: `How to: ${searchQuery}`,
         videoId: `search?q=${encodedQuery}`,
@@ -227,12 +235,17 @@ export default function CoachChatScreen() {
         thumbnail: '🎬',
       },
     ];
-
-    return videos;
   };
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
+
+    // Check premium status before sending
+    // Limit: Free users can only store a history of 10 messages (including AI replies/system prompts).
+    // Trigger: Once history length > 10, any new message attempt triggers the paywall.
+    if (messages.length > 10 && !requirePremium()) {
+      return;
+    }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
@@ -247,7 +260,8 @@ export default function CoachChatScreen() {
     setInputText('');
 
     try {
-      const systemContext = `You are Savvy Sidekick, a friendly AI financial personal assistant for busy moms. You speak in a warm, empowering tone.
+      // DIY Coach Context
+      const systemContext = `You are the DIY Coach, a friendly financial guide for busy moms. You speak in a warm, empowering tone.
 
 Current user financial context:
 - Name: ${profile?.name || 'there'}
@@ -272,13 +286,14 @@ Guidelines:
 - Be encouraging and celebrate their wins
 - If asked to analyze spending, reference their real spending data`;
 
-      const response = await generateText(`${systemContext}
+      setIsGenerating(true);
+      const response = await generateGeminiResponse(`${systemContext}
 
 The user asked: "${text.trim()}"
 
-Response:`);
+Response:`, config.model);
+      setIsGenerating(false);
 
-      // Generate YouTube recommendations for DIY/how-to queries
       const isDIYQuery = /how to|diy|fix|make|create|repair|clean|build/i.test(text.trim());
       const youtubeVideos = isDIYQuery ? generateYouTubeRecommendations(text.trim()) : undefined;
 
@@ -294,7 +309,6 @@ Response:`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('AI generation error:', error);
-
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: "I'm having trouble connecting right now. Please check your internet connection and try again.",
@@ -302,6 +316,7 @@ Response:`);
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
+      setIsGenerating(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
@@ -317,7 +332,12 @@ Response:`);
           style: 'destructive',
           onPress: async () => {
             await storage.setChatHistory([]);
-            setMessages([INITIAL_MESSAGE]);
+            setMessages([{
+              id: '0',
+              text: config.initialMessage,
+              isUser: false,
+              timestamp: new Date(),
+            }]);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           },
         },
@@ -326,10 +346,11 @@ Response:`);
   };
 
   const handleQuickReply = (text: string) => {
+    handleSendMessage(text);
   };
 
-  const handlePaywallSuccess = async (profile: any) => {
-    await refreshProfile();
+  const handlePaywallSuccess = async () => {
+    await actions.refreshAll();
     hidePaywall();
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
@@ -342,11 +363,10 @@ Response:`);
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('Error', 'Unable to open YouTube');
+        Linking.openURL(url);
       }
     } catch (error) {
       console.error('Failed to open YouTube:', error);
-      Alert.alert('Error', 'Unable to open YouTube');
     }
   };
 
@@ -355,66 +375,25 @@ Response:`);
     router.back();
   };
 
-  // Loading state with ChatSkeleton
+  // Loading Skeleton
   if (isLoadingHistory) {
     return (
-      <LinearGradient colors={Gradients.background} style={styles.container}>
-        <Animated.View
-          style={[
-            styles.header,
-            {
-              opacity: headerFadeAnim,
-              paddingTop: insets.top + 8,
-              borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.08)' : Colors.glassBorder,
-            },
-          ]}
-        >
-          <View style={styles.headerContent}>
-            <PressableScale onPress={handleBack} scaleValue={0.9}>
-              <View
-                style={[
-                  styles.backButton,
-                  {
-                    backgroundColor: isDark ? 'rgba(45, 212, 191, 0.1)' : 'rgba(20, 184, 166, 0.08)',
-                    borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : 'rgba(20, 184, 166, 0.15)',
-                  },
-                ]}
-              >
-                <Ionicons name="arrow-back" size={20} color={Colors.electricTeal} />
-              </View>
-            </PressableScale>
-            <View style={styles.headerCenter}>
-              <View style={styles.headerAvatarGlow}>
-                <LinearGradient
-                  colors={[Colors.electricTeal, Colors.amethyst]}
-                  style={styles.headerAvatar}
-                >
-                  <Text style={styles.headerAvatarEmoji}>✨</Text>
-                </LinearGradient>
-              </View>
-              <View>
-                <Text style={[styles.headerTitle, { color: Colors.primaryText }]}>Savvy Sidekick</Text>
-                <View style={styles.statusRow}>
-                  <View style={[styles.statusDot, { backgroundColor: Colors.success }]} />
-                  <Text style={[styles.statusText, { color: Colors.silverGrey }]}>Ready to help</Text>
-                </View>
-              </View>
-            </View>
-            <View style={{ width: 48 }} />
-          </View>
-        </Animated.View>
+      <View style={styles.container}>
+        <LinearGradient colors={Gradients.mesh} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
         <ChatSkeleton />
-      </LinearGradient>
+      </View>
     );
   }
 
   return (
-    <LinearGradient colors={Gradients.background} style={styles.container}>
-      {/* Gritify Elite Paywall */}
-      {isPaywallVisible && paywall && (
-        <GritifyElitePaywall
+    <View style={styles.container}>
+      <LinearGradient colors={Gradients.mesh} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+
+      {/* Grit Elite Paywall */}
+      {isPaywallVisible && packages.length > 0 && (
+        <GritElitePaywall
           visible={isPaywallVisible}
-          paywall={paywall}
+          packages={packages}
           onSuccess={handlePaywallSuccess}
           onClose={hidePaywall}
         />
@@ -431,88 +410,88 @@ Response:`);
           },
         ]}
       >
-          <BlurView
-            intensity={isDark ? 30 : 20}
-            tint={isDark ? 'dark' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
-          <View
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                backgroundColor: isDark ? 'rgba(10, 6, 18, 0.7)' : 'rgba(255, 255, 255, 0.85)',
-              },
-            ]}
-          />
-          <View style={styles.headerContent}>
-            <PressableScale onPress={handleBack} scaleValue={0.9}>
-              <View
-                style={[
-                  styles.backButton,
-                  {
-                    backgroundColor: isDark ? 'rgba(45, 212, 191, 0.1)' : 'rgba(20, 184, 166, 0.08)',
-                    borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : 'rgba(20, 184, 166, 0.15)',
-                    shadowColor: isDark ? Colors.electricTeal : '#000000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: isDark ? 0.15 : 0.08,
-                    shadowRadius: 8,
-                    elevation: 3,
-                  },
-                ]}
+        <BlurView
+          intensity={isDark ? 30 : 20}
+          tint={isDark ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: isDark ? 'rgba(10, 6, 18, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+            },
+          ]}
+        />
+        <View style={styles.headerContent}>
+          <PressableScale onPress={handleBack} scaleValue={0.9}>
+            <View
+              style={[
+                styles.backButton,
+                {
+                  backgroundColor: isDark ? 'rgba(45, 212, 191, 0.1)' : 'rgba(20, 184, 166, 0.08)',
+                  borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : 'rgba(20, 184, 166, 0.15)',
+                  shadowColor: isDark ? Colors.electricTeal : '#000000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: isDark ? 0.15 : 0.08,
+                  shadowRadius: 8,
+                  elevation: 3,
+                },
+              ]}
+            >
+              <Ionicons name="arrow-back" size={20} color={Colors.electricTeal} />
+            </View>
+          </PressableScale>
+          <View style={styles.headerCenter}>
+            <Animated.View
+              style={[
+                styles.headerAvatarGlow,
+                {
+                  shadowColor: Colors.electricTeal,
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowRadius: 12,
+                  shadowOpacity: avatarGlow as any,
+                  elevation: 8,
+                },
+              ]}
+            >
+              <LinearGradient
+                colors={config.gradient as any}
+                style={styles.headerAvatar}
               >
-                <Ionicons name="arrow-back" size={20} color={Colors.electricTeal} />
-              </View>
-            </PressableScale>
-            <View style={styles.headerCenter}>
-              <Animated.View
-                style={[
-                  styles.headerAvatarGlow,
-                  {
-                    shadowColor: Colors.electricTeal,
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowRadius: 12,
-                    shadowOpacity: avatarGlow as any,
-                    elevation: 8,
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={[Colors.electricTeal, Colors.amethyst]}
-                  style={styles.headerAvatar}
-                >
-                  <Text style={styles.headerAvatarEmoji}>✨</Text>
-                </LinearGradient>
-              </Animated.View>
-              <View>
-                <Text style={[styles.headerTitle, { color: Colors.primaryText }]}>Savvy Sidekick</Text>
-                <View style={styles.statusRow}>
-                  <View style={[styles.statusDot, { backgroundColor: Colors.success }]} />
-                  <Text style={[styles.statusText, { color: Colors.silverGrey }]}>Ready to help</Text>
-                </View>
+                <Text style={styles.headerAvatarEmoji}>{config.emoji}</Text>
+              </LinearGradient>
+            </Animated.View>
+            <View>
+              <Text style={[styles.headerTitle, { color: Colors.primaryText }]}>{config.title}</Text>
+              <View style={styles.statusRow}>
+                <View style={[styles.statusDot, { backgroundColor: Colors.success }]} />
+                <Text style={[styles.statusText, { color: Colors.silverGrey }]}>Ready to help</Text>
               </View>
             </View>
-            {messages.length > 1 && (
-              <PressableScale
-                onPress={handleClearHistory}
-                style={[
-                  styles.clearButton,
-                  {
-                    backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : Colors.white,
-                    borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : Colors.glassBorder,
-                  },
-                ]}
-                scaleValue={0.9}
-              >
-                <Ionicons
-                  name="trash-outline"
-                  size={18}
-                  color={isDark ? Colors.electricTeal : Colors.tertiaryText}
-                />
-              </PressableScale>
-            )}
-            {messages.length <= 1 && <View style={{ width: 48 }} />}
           </View>
-        </Animated.View>
+          {messages.length > 1 && (
+            <PressableScale
+              onPress={handleClearHistory}
+              style={[
+                styles.clearButton,
+                {
+                  backgroundColor: isDark ? 'rgba(20, 10, 36, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+                  borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : Colors.glassBorder,
+                },
+              ]}
+              scaleValue={0.9}
+            >
+              <Ionicons
+                name="trash-outline"
+                size={18}
+                color={isDark ? Colors.electricTeal : Colors.tertiaryText}
+              />
+            </PressableScale>
+          )}
+          {messages.length <= 1 && <View style={{ width: 48 }} />}
+        </View>
+      </Animated.View>
 
       {/* Messages */}
       <ScrollView
@@ -522,62 +501,104 @@ Response:`);
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-          {messages.map((message) => (
-            <View key={message.id}>
-              <View
-                style={[
-                  styles.messageRow,
-                  message.isUser ? styles.messageRowUser : styles.messageRowAI,
-                ]}
-              >
-                {/* AI Avatar */}
-                {!message.isUser && (
-                  <View
-                    style={[
-                      styles.aiAvatarOuter,
-                      {
-                        shadowColor: Colors.electricTeal,
-                        shadowOffset: { width: 0, height: 0 },
-                        shadowOpacity: isDark ? 0.4 : 0.2,
-                        shadowRadius: 10,
-                        elevation: 5,
-                      },
-                    ]}
+        {messages.map((message) => (
+          <View key={message.id}>
+            <View
+              style={[
+                styles.messageRow,
+                message.isUser ? styles.messageRowUser : styles.messageRowAI,
+              ]}
+            >
+              {/* AI Avatar */}
+              {!message.isUser && (
+                <View
+                  style={[
+                    styles.aiAvatarOuter,
+                    {
+                      shadowColor: Colors.electricTeal,
+                      shadowOffset: { width: 0, height: 0 },
+                      shadowOpacity: isDark ? 0.4 : 0.2,
+                      shadowRadius: 10,
+                      elevation: 5,
+                    },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={config.gradient as any}
+                    style={styles.aiAvatarGradient}
                   >
-                    <LinearGradient
-                      colors={[Colors.electricTeal, Colors.amethyst]}
-                      style={styles.aiAvatarGradient}
-                    >
-                      <Text style={styles.aiAvatarEmoji}>✨</Text>
-                    </LinearGradient>
-                  </View>
-                )}
+                    <Text style={styles.aiAvatarEmoji}>{config.emoji}</Text>
+                  </LinearGradient>
+                </View>
+              )}
 
-                {/* Message Bubble */}
-                {message.isUser ? (
-                  <View
-                    style={[
-                      styles.bubbleUser,
-                      {
-                        shadowColor: Colors.amethyst,
-                        shadowOffset: { width: 0, height: 6 },
-                        shadowOpacity: 0.25,
-                        shadowRadius: 16,
-                        elevation: 6,
-                      },
-                    ]}
+              {/* Message Bubble */}
+              {message.isUser ? (
+                <View
+                  style={[
+                    styles.bubbleUser,
+                    {
+                      shadowColor: Colors.amethyst,
+                      shadowOffset: { width: 0, height: 6 },
+                      shadowOpacity: 0.25,
+                      shadowRadius: 16,
+                      elevation: 6,
+                    },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={[Colors.electricTeal, Colors.amethyst] as const}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.bubbleUserGradient}
+                  >
+                    <Text
+                      style={[
+                        styles.messageText,
+                        {
+                          color: '#FFFFFF',
+                          fontSize: Typography.bodyMedium.fontSize,
+                          lineHeight: Typography.bodyMedium.lineHeight,
+                          letterSpacing: Typography.bodyMedium.letterSpacing,
+                        },
+                      ]}
+                    >
+                      {message.text}
+                    </Text>
+                  </LinearGradient>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.bubbleAIOuter,
+                    {
+                      borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : 'rgba(20, 184, 166, 0.12)',
+                      shadowColor: isDark ? Colors.electricTeal : '#000000',
+                      shadowOffset: { width: 0, height: 3 },
+                      shadowOpacity: isDark ? 0.12 : 0.06,
+                      shadowRadius: 14,
+                      elevation: 4,
+                    },
+                  ]}
+                >
+                  <BlurView
+                    intensity={isDark ? 40 : 20}
+                    tint={isDark ? 'dark' : 'light'}
+                    style={styles.bubbleAIBlur}
                   >
                     <LinearGradient
-                      colors={[Colors.electricTeal, Colors.amethyst] as const}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.bubbleUserGradient}
+                      colors={
+                        isDark
+                          ? ['rgba(20, 10, 36, 0.6)', 'rgba(20, 10, 36, 0.4)'] as const
+                          : ['rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.6)'] as const
+                      }
+                      style={styles.bubbleAIInner}
                     >
                       <Text
                         style={[
                           styles.messageText,
                           {
-                            color: '#FFFFFF',
+                            color: Colors.primaryText,
                             fontSize: Typography.bodyMedium.fontSize,
                             lineHeight: Typography.bodyMedium.lineHeight,
                             letterSpacing: Typography.bodyMedium.letterSpacing,
@@ -587,211 +608,169 @@ Response:`);
                         {message.text}
                       </Text>
                     </LinearGradient>
-                  </View>
-                ) : (
-                  <View
+                  </BlurView>
+                </View>
+              )}
+
+              {/* User Avatar */}
+              {message.isUser && (
+                <LinearGradient
+                  colors={[Colors.radiantMagenta, Colors.neonPink] as const}
+                  style={styles.userAvatar}
+                >
+                  <Ionicons name="person" size={16} color="#FFFFFF" />
+                </LinearGradient>
+              )}
+            </View>
+
+            {/* Watch & Learn Section */}
+            {!message.isUser && message.youtubeVideos && message.youtubeVideos.length > 0 && (
+              <View style={styles.watchLearnSection}>
+                <View style={styles.watchLearnHeader}>
+                  <Ionicons name="play-circle" size={18} color={Colors.radiantMagenta} />
+                  <Text
                     style={[
-                      styles.bubbleAIOuter,
+                      styles.watchLearnTitle,
                       {
-                        borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : 'rgba(20, 184, 166, 0.12)',
-                        shadowColor: isDark ? Colors.electricTeal : '#000000',
-                        shadowOffset: { width: 0, height: 3 },
-                        shadowOpacity: isDark ? 0.12 : 0.06,
-                        shadowRadius: 14,
-                        elevation: 4,
+                        color: Colors.primaryText,
+                        ...Typography.titleSmall,
                       },
                     ]}
                   >
-                    <BlurView
-                      intensity={isDark ? 40 : 20}
-                      tint={isDark ? 'dark' : 'light'}
-                      style={styles.bubbleAIBlur}
+                    Watch & Learn
+                  </Text>
+                </View>
+                <View style={styles.videoList}>
+                  {message.youtubeVideos.map((video, index) => (
+                    <PressableScale
+                      key={index}
+                      onPress={() => handleOpenYouTube(video.videoId)}
+                      scaleValue={0.97}
                     >
-                      <LinearGradient
-                        colors={
-                          isDark
-                            ? ['rgba(20, 10, 36, 0.95)', 'rgba(20, 10, 36, 0.90)'] as const
-                            : ['rgba(255, 255, 255, 0.98)', 'rgba(255, 255, 255, 0.92)'] as const
-                        }
-                        style={styles.bubbleAIInner}
+                      <View
+                        style={[
+                          styles.videoCard,
+                          {
+                            backgroundColor: isDark ? 'rgba(20, 10, 36, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+                            borderColor: isDark
+                              ? 'rgba(45, 212, 191, 0.15)'
+                              : 'rgba(0, 0, 0, 0.06)',
+                            shadowColor: isDark ? Colors.electricTeal : '#000000',
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: isDark ? 0.12 : 0.08,
+                            shadowRadius: 16,
+                            elevation: 3,
+                          },
+                        ]}
                       >
-                        <Text
-                          style={[
-                            styles.messageText,
-                            {
-                              color: Colors.primaryText,
-                              fontSize: Typography.bodyMedium.fontSize,
-                              lineHeight: Typography.bodyMedium.lineHeight,
-                              letterSpacing: Typography.bodyMedium.letterSpacing,
-                            },
-                          ]}
-                        >
-                          {message.text}
-                        </Text>
-                      </LinearGradient>
-                    </BlurView>
-                  </View>
-                )}
-
-                {/* User Avatar */}
-                {message.isUser && (
-                  <LinearGradient
-                    colors={[Colors.radiantMagenta, Colors.neonPink] as const}
-                    style={styles.userAvatar}
-                  >
-                    <Ionicons name="person" size={16} color="#FFFFFF" />
-                  </LinearGradient>
-                )}
-              </View>
-
-              {/* Watch & Learn Section */}
-              {!message.isUser && message.youtubeVideos && message.youtubeVideos.length > 0 && (
-                <View style={styles.watchLearnSection}>
-                  <View style={styles.watchLearnHeader}>
-                    <Ionicons name="play-circle" size={18} color={Colors.radiantMagenta} />
-                    <Text
-                      style={[
-                        styles.watchLearnTitle,
-                        {
-                          color: Colors.primaryText,
-                          ...Typography.titleSmall,
-                        },
-                      ]}
-                    >
-                      Watch & Learn
-                    </Text>
-                  </View>
-                  <View style={styles.videoList}>
-                    {message.youtubeVideos.map((video, index) => (
-                      <PressableScale
-                        key={index}
-                        onPress={() => handleOpenYouTube(video.videoId)}
-                        scaleValue={0.97}
-                      >
-                        <View
-                          style={[
-                            styles.videoCard,
-                            {
-                              backgroundColor: isDark ? 'rgba(20, 10, 36, 0.85)' : Colors.white,
-                              borderColor: isDark
-                                ? 'rgba(45, 212, 191, 0.15)'
-                                : 'rgba(0, 0, 0, 0.06)',
-                              shadowColor: isDark ? Colors.electricTeal : '#000000',
-                              shadowOffset: { width: 0, height: 4 },
-                              shadowOpacity: isDark ? 0.12 : 0.08,
-                              shadowRadius: 16,
-                              elevation: 3,
-                            },
-                          ]}
-                        >
-                          <View style={[styles.videoThumbnail, { overflow: 'hidden' }]}>
-                            <LinearGradient
-                              colors={
-                                isDark
-                                  ? ['rgba(45, 27, 61, 0.8)', 'rgba(45, 212, 191, 0.1)'] as const
-                                  : ['rgba(245, 242, 238, 1)', 'rgba(20, 184, 166, 0.08)'] as const
-                              }
-                              style={styles.videoThumbnailGradient}
-                            >
-                              <Text style={styles.videoEmoji}>{video.thumbnail}</Text>
-                            </LinearGradient>
-                          </View>
-                          <View style={styles.videoInfo}>
+                        <View style={[styles.videoThumbnail, { overflow: 'hidden' }]}>
+                          <LinearGradient
+                            colors={
+                              isDark
+                                ? ['rgba(45, 27, 61, 0.8)', 'rgba(45, 212, 191, 0.1)'] as const
+                                : ['rgba(245, 242, 238, 1)', 'rgba(20, 184, 166, 0.08)'] as const
+                            }
+                            style={styles.videoThumbnailGradient}
+                          >
+                            <Text style={styles.videoEmoji}>{video.thumbnail}</Text>
+                          </LinearGradient>
+                        </View>
+                        <View style={styles.videoInfo}>
+                          <Text
+                            style={[
+                              styles.videoTitle,
+                              {
+                                color: Colors.primaryText,
+                                ...Typography.labelLarge,
+                              },
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {video.title}
+                          </Text>
+                          <View style={styles.videoFooter}>
+                            <Ionicons name="logo-youtube" size={14} color={Colors.error} />
                             <Text
                               style={[
-                                styles.videoTitle,
+                                styles.videoSource,
                                 {
-                                  color: Colors.primaryText,
-                                  ...Typography.labelLarge,
+                                  color: Colors.silverGrey,
+                                  ...Typography.labelSmall,
                                 },
                               ]}
-                              numberOfLines={2}
                             >
-                              {video.title}
+                              YouTube Tutorial
                             </Text>
-                            <View style={styles.videoFooter}>
-                              <Ionicons name="logo-youtube" size={14} color={Colors.error} />
-                              <Text
-                                style={[
-                                  styles.videoSource,
-                                  {
-                                    color: Colors.silverGrey,
-                                    ...Typography.labelSmall,
-                                  },
-                                ]}
-                              >
-                                YouTube Tutorial
-                              </Text>
-                            </View>
                           </View>
-                          <Ionicons
-                            name="chevron-forward"
-                            size={18}
-                            color={Colors.silverGrey}
-                          />
                         </View>
-                      </PressableScale>
-                    ))}
-                  </View>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={18}
+                          color={Colors.silverGrey}
+                        />
+                      </View>
+                    </PressableScale>
+                  ))}
                 </View>
-              )}
-            </View>
-          ))}
+              </View>
+            )}
+          </View>
+        ))}
 
-          {/* Typing Indicator with Animated Dots */}
-          {isLoading && (
-            <View style={styles.messageRow}>
+        {/* Typing Indicator with Animated Dots */}
+        {isLoading && (
+          <View style={styles.messageRow}>
+            <View
+              style={[
+                styles.aiAvatarOuter,
+                {
+                  shadowColor: Colors.electricTeal,
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: isDark ? 0.4 : 0.2,
+                  shadowRadius: 10,
+                  elevation: 5,
+                },
+              ]}
+            >
+              <LinearGradient
+                colors={config.gradient as any}
+                style={styles.aiAvatarGradient}
+              >
+                <Text style={styles.aiAvatarEmoji}>{config.emoji}</Text>
+              </LinearGradient>
+            </View>
+            <BlurView
+              intensity={isDark ? 40 : 20}
+              tint={isDark ? 'dark' : 'light'}
+              style={[
+                styles.typingBubble,
+                {
+                  borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : Colors.glassBorder,
+                  shadowColor: isDark ? Colors.electricTeal : '#000000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: isDark ? 0.12 : 0.06,
+                  shadowRadius: 12,
+                  elevation: 3,
+                },
+              ]}
+            >
               <View
                 style={[
-                  styles.aiAvatarOuter,
+                  StyleSheet.absoluteFill,
                   {
-                    shadowColor: Colors.electricTeal,
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowOpacity: isDark ? 0.4 : 0.2,
-                    shadowRadius: 10,
-                    elevation: 5,
+                    backgroundColor: isDark ? 'rgba(20, 10, 36, 0.6)' : 'rgba(255, 255, 255, 0.8)',
                   },
                 ]}
-              >
-                <LinearGradient
-                  colors={[Colors.electricTeal, Colors.amethyst]}
-                  style={styles.aiAvatarGradient}
-                >
-                  <Text style={styles.aiAvatarEmoji}>✨</Text>
-                </LinearGradient>
+              />
+              <View style={styles.typingDotsContainer}>
+                <TypingDot delay={0} />
+                <TypingDot delay={200} />
+                <TypingDot delay={400} />
               </View>
-              <BlurView
-                intensity={isDark ? 40 : 20}
-                tint={isDark ? 'dark' : 'light'}
-                style={[
-                  styles.typingBubble,
-                  {
-                    borderColor: isDark ? 'rgba(45, 212, 191, 0.2)' : Colors.glassBorder,
-                    shadowColor: isDark ? Colors.electricTeal : '#000000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: isDark ? 0.12 : 0.06,
-                    shadowRadius: 12,
-                    elevation: 3,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      backgroundColor: isDark ? 'rgba(20, 10, 36, 0.95)' : 'rgba(255, 255, 255, 0.98)',
-                    },
-                  ]}
-                />
-                <View style={styles.typingDotsContainer}>
-                  <TypingDot delay={0} />
-                  <TypingDot delay={200} />
-                  <TypingDot delay={400} />
-                </View>
-              </BlurView>
-            </View>
-          )}
-        </ScrollView>
+            </BlurView>
+          </View>
+        )}
+      </ScrollView>
 
       {/* Quick Replies - Luxury Chips */}
       {messages.length <= 1 && (
@@ -812,7 +791,7 @@ Response:`);
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.quickRepliesScroll}
           >
-            {QUICK_REPLIES.map((reply) => (
+            {config.quickReplies.map((reply) => (
               <PressableScale
                 key={reply.id}
                 onPress={() => handleQuickReply(reply.text)}
@@ -858,9 +837,9 @@ Response:`);
 
       {/* Floating Premium Input Bar - Absolute Bottom with KeyboardAvoidingView */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior="padding"
         style={styles.keyboardAvoidingContainer}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <View
           style={[
@@ -888,7 +867,7 @@ Response:`);
               style={[
                 StyleSheet.absoluteFill,
                 {
-                  backgroundColor: isDark ? 'rgba(20, 10, 36, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                  backgroundColor: isDark ? 'rgba(20, 10, 36, 0.6)' : 'rgba(255, 255, 255, 0.8)',
                   borderRadius: BorderRadius.xxl + 4,
                 },
               ]}
@@ -936,7 +915,7 @@ Response:`);
           </BlurView>
         </View>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -945,10 +924,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   keyboardAvoidingContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    width: '100%',
   },
 
   // ── Header ──────────────────────────────────────────────────────────────

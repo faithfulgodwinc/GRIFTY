@@ -1,23 +1,22 @@
 import React from 'react';
 import { useSubscription } from '@/contexts/SubscriptionContext';
-import { GritifyElitePaywall } from './GritifyElitePaywall';
+import { GritElitePaywall } from './GritElitePaywall';
 
 export function GlobalPaywallWrapper() {
-  const { isPaywallVisible, paywall, hidePaywall, refreshProfile } = useSubscription();
+  const { isPaywallVisible, packages, hidePaywall } = useSubscription();
 
-  const handleSuccess = async (profile: any) => {
-    await refreshProfile();
+  const handleSuccess = () => {
     hidePaywall();
   };
 
-  if (!paywall || !isPaywallVisible) {
+  if (!isPaywallVisible || packages.length === 0) {
     return null;
   }
 
   return (
-    <GritifyElitePaywall
+    <GritElitePaywall
       visible={isPaywallVisible}
-      paywall={paywall}
+      packages={packages}
       onSuccess={handleSuccess}
       onClose={hidePaywall}
     />

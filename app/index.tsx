@@ -4,7 +4,7 @@ import { Redirect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Gradients } from '@/constants/Colors';
 import { storage } from '@/utils/storage';
-import { useAuth } from '@fastshot/auth';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Index() {
   const [loading, setLoading] = useState(true);
@@ -39,12 +39,9 @@ export default function Index() {
     );
   }
 
-  // If not authenticated, go to onboarding then auth
+  // If not authenticated, always go to onboarding (Landing Page)
   if (!isAuthenticated) {
-    if (!onboardingComplete) {
-      return <Redirect href="/onboarding" />;
-    }
-    return <Redirect href="/(auth)/login" />;
+    return <Redirect href="/onboarding" />;
   }
 
   // If authenticated but blueprint not complete, go to blueprint setup

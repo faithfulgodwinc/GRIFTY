@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, ViewStyle, Animated } from 'react-native';
+import { View, StyleSheet, ViewStyle, Animated, StyleProp } from 'react-native';
 import { getThemeColors } from '@/constants/Colors';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Spacing } from '@/constants/Theme';
 
 interface GlassCardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   intensity?: number;
   animated?: boolean;
   delay?: number;
@@ -41,15 +41,15 @@ export function GlassCard({ children, style, animated = false, delay = 0, noPadd
   }, [animated, delay, fadeAnim, slideAnim]);
 
   const containerStyle = {
-    borderRadius: 20,
+    borderRadius: 24, // Slightly more rounded for modern feel
     backgroundColor: Colors.cardBackground,
     borderWidth: 1,
     borderColor: Colors.glassBorder,
-    shadowColor: isDark ? 'rgba(45, 212, 191, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 16,
-    elevation: 3,
+    shadowColor: isDark ? '#000000' : 'rgba(148, 163, 184, 0.1)', // Subtler shadow color
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: isDark ? 0.3 : 1,
+    shadowRadius: 24,
+    elevation: 4,
     overflow: 'hidden' as const,
   };
 

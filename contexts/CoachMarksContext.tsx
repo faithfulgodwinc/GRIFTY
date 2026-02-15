@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@fastshot/auth';
+import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import { shouldShowPaywallAfterOnboarding, markPaywallShownAfterOnboarding } from './SubscriptionContext';
+import { storage } from '@/utils/storage';
 
 export interface TourStep {
   id: string;
@@ -36,8 +37,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'home-spendable-today',
     screen: 'home',
     targetId: 'spendable-today-card',
-    title: 'Your Daily Power Number 💰',
-    description: 'This is YOUR number—what you can spend guilt-free today! Calculated from your income and goals. Stay under it, build momentum, and watch your savings grow!',
+    title: 'Your Daily Power Number',
+    description: 'Your guilt-free spending limit for today. Stay under it to build momentum and savings!',
     position: 'top',
     spotlightSize: 380,
   },
@@ -45,8 +46,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'home-momentum-streak',
     screen: 'home',
     targetId: 'momentum-streak-card',
-    title: 'Build Your Winning Streak 🔥',
-    description: 'Every day you stay under budget, you\'re leveling up! Stack these wins to unlock achievements and build unstoppable financial confidence.',
+    title: 'Build Your Winning Streak',
+    description: 'Stay under budget to level up! Stack daily wins to build unstoppable financial confidence.',
     position: 'center',
     spotlightSize: 360,
   },
@@ -54,8 +55,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'home-quick-log',
     screen: 'home',
     targetId: 'quick-log-section',
-    title: 'Track in 2 Seconds Flat ⚡',
-    description: 'Busy mom? No problem! One tap to log expenses—no typing, no hassle. Track your spending faster than ordering coffee.',
+    title: 'Track in 2 Seconds Flat',
+    description: 'One tap to log expenses. No typing, no hassle—tracking faster than ordering coffee.',
     position: 'bottom',
     spotlightSize: 340,
   },
@@ -65,8 +66,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'savings-wins',
     screen: 'savings',
     targetId: 'savings-wins-section',
-    title: 'Celebrate Every Win 🏆',
-    description: 'Got a discount? Resisted impulse buying? Log it here! Big or small, every smart money move deserves recognition. You\'re crushing it!',
+    title: 'Celebrate Every Win',
+    description: 'Got a discount? Resisted impulse buying? Log it here! Every smart move deserves recognition.',
     position: 'top',
     spotlightSize: 360,
   },
@@ -74,8 +75,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'savings-mom-tips',
     screen: 'savings',
     targetId: 'mom-tips-carousel',
-    title: 'Real Mom Money Hacks 💡',
-    description: 'Tested-and-approved tips from moms who GET IT. Swipe through for practical, no-BS strategies that actually work in real life.',
+    title: 'Real Mom Money Hacks',
+    description: 'Tested strategies from moms who GET IT. Swipe for practical, real-life money hacks.',
     position: 'center',
     spotlightSize: 340,
   },
@@ -85,8 +86,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'invest-power',
     screen: 'invest',
     targetId: 'investment-power-card',
-    title: 'Your Future, Amplified 💪',
-    description: 'See how your savings translate to real wealth! These aren\'t fantasies—they\'re projections based on YOUR actual progress. Keep saving, keep growing!',
+    title: 'Your Future, Amplified',
+    description: 'See how your savings turn into real wealth! These are projections based on YOUR progress.',
     position: 'top',
     spotlightSize: 360,
   },
@@ -94,8 +95,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'invest-market-pulse',
     screen: 'invest',
     targetId: 'market-pulse-section',
-    title: 'Stay Market-Smart 📈',
-    description: 'Live market insights to empower your decisions. You don\'t need to be a Wall Street pro—just informed, confident, and ready to grow your wealth!',
+    title: 'Stay Market-Smart',
+    description: 'Live insights to empower your decisions. You don\'t need to be a pro—just informed and ready to grow!',
     position: 'center',
     spotlightSize: 340,
   },
@@ -105,8 +106,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'home-floating-coach',
     screen: 'home',
     targetId: 'floating-coach-icon',
-    title: 'Your AI Money Concierge 💬',
-    description: 'Meet your 24/7 financial bestie! Tap this floating button anytime for instant advice, budgeting tips, and personalized guidance. We\'ve got your back!',
+    title: 'Your AI Money Concierge',
+    description: 'Your 24/7 financial bestie! Tap for instant advice, budgeting tips, and personalized guidance.',
     position: 'bottom',
     spotlightSize: 200,
   },
@@ -126,33 +127,6 @@ export function CoachMarksProvider({ children }: CoachMarksProviderProps) {
   const currentStep = TOUR_STEPS[currentStepIndex] || null;
 
   // ─── Check Tour Status ─────────────────────────────────────────────────────
-  const checkTourStatus = useCallback(async () => {
-    if (!user?.id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('has_completed_tour')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
-
-      const completed = data?.has_completed_tour ?? false;
-      setHasCompletedTour(completed);
-
-      // Auto-start tour if not completed
-      if (!completed) {
-        // Delay to let the app fully load
-        setTimeout(() => {
-          startTour();
-        }, 1500);
-      }
-    } catch (error) {
-      console.error('Failed to check tour status:', error);
-    }
-  }, [user?.id]);
-
   // ─── Start Tour ────────────────────────────────────────────────────────────
   const startTour = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -160,6 +134,53 @@ export function CoachMarksProvider({ children }: CoachMarksProviderProps) {
     setVisitedScreens(new Set());
     setIsTourActive(true);
   }, []);
+
+  // ─── Check Tour Status ─────────────────────────────────────────────────────
+  const checkTourStatus = useCallback(async () => {
+    if (!user?.id) return;
+
+    // Check local storage first (fastest)
+    const localCompleted = await storage.getTourComplete();
+    if (localCompleted) {
+      setHasCompletedTour(true);
+      return;
+    }
+
+    try {
+      // Try fetching from Supabase, but handle missing column gracefully
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('has_completed_tour')
+        .eq('id', user.id)
+        .maybeSingle(); // Use maybeSingle to avoid 406/PGRST116 if row missing
+
+      if (error) {
+        // Ignore specific error for missing column "has_completed_tour" (42703)
+        if (error.code !== '42703') {
+          console.warn('Supabase tour check failed (non-critical):', error.message);
+        }
+      } else if (data?.has_completed_tour) {
+        setHasCompletedTour(true);
+        await storage.setTourComplete(true); // Sync back to local
+        return;
+      }
+
+      // If we got here, tour is NOT complete locally or remotely
+      // Delay to let the app fully load
+      setTimeout(() => {
+        startTour();
+      }, 1500);
+
+    } catch (error) {
+      console.warn('Failed to check tour status (fallback to local):', error);
+      // Fallback to start tour if uncertain
+      setTimeout(() => {
+        startTour();
+      }, 1500);
+    }
+  }, [user?.id, startTour]);
+
+
 
   // ─── Next Step ─────────────────────────────────────────────────────────────
   const nextStep = useCallback(() => {
@@ -215,18 +236,21 @@ export function CoachMarksProvider({ children }: CoachMarksProviderProps) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     setIsTourActive(false);
     setCurrentStepIndex(0);
+    setHasCompletedTour(true);
 
-    // Mark as completed in Supabase
+    // Save locally
+    await storage.setTourComplete(true);
+
+    // Mark as completed in Supabase (best effort)
     if (user?.id) {
       try {
         await supabase
-          .from('profiles')
+          .from('user_profiles')
           .update({ has_completed_tour: true })
           .eq('id', user.id);
-
-        setHasCompletedTour(true);
       } catch (error) {
-        console.error('Failed to mark tour as skipped:', error);
+        // Silently fail if column doesn't exist
+        console.warn('Failed to sync tour skip to Supabase (ignored):', error);
       }
     }
   }, [user?.id]);
@@ -236,26 +260,30 @@ export function CoachMarksProvider({ children }: CoachMarksProviderProps) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setIsTourActive(false);
     setCurrentStepIndex(0);
+    setHasCompletedTour(true);
 
-    // Mark as completed in Supabase
+    // Save locally
+    await storage.setTourComplete(true);
+
+    // Mark as completed in Supabase (best effort)
     if (user?.id) {
       try {
         await supabase
-          .from('profiles')
+          .from('user_profiles')
           .update({ has_completed_tour: true })
           .eq('id', user.id);
+      } catch (error) {
+        console.warn('Failed to sync tour completion to Supabase (ignored):', error);
+      }
 
-        setHasCompletedTour(true);
-
-        // Show paywall as "Grand Finale" if not shown yet
+      // Show paywall as "Grand Finale" if not shown yet
+      try {
         const shouldShow = await shouldShowPaywallAfterOnboarding();
         if (shouldShow) {
           await markPaywallShownAfterOnboarding();
-          // The paywall will be triggered via the subscription context
-          // when the user navigates to the home screen
         }
-      } catch (error) {
-        console.error('Failed to mark tour as completed:', error);
+      } catch (e) {
+        console.warn('Failed to check paywall status:', e);
       }
     }
   }, [user?.id]);

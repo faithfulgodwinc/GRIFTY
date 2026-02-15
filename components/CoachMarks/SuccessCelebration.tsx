@@ -97,6 +97,7 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
             {
               transform: [{ scale: scaleAnim }],
               opacity: opacityAnim,
+              // aspectRatio: 1, // REMOVED: Causing clipping on smaller screens
             },
           ]}
         >
@@ -144,7 +145,7 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
                   },
                 ]}
               >
-                <Text style={styles.sparkleText}>✨</Text>
+                <Ionicons name="sparkles" size={32} color={Colors.electricTeal} />
               </Animated.View>
 
               <Animated.View
@@ -170,7 +171,7 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
                   },
                 ]}
               >
-                <Text style={styles.sparkleText}>🎉</Text>
+                <Ionicons name="ribbon" size={32} color={Colors.radiantMagenta} />
               </Animated.View>
 
               <Animated.View
@@ -196,7 +197,7 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
                   },
                 ]}
               >
-                <Text style={styles.sparkleText}>🌟</Text>
+                <Ionicons name="star" size={32} color={Colors.sunKissedAmber} />
               </Animated.View>
 
               {/* Premium Trophy Icon */}
@@ -228,7 +229,7 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
                       },
                     ]}
                   />
-                  <Text style={styles.trophyEmoji}>🏆</Text>
+                  <Ionicons name="trophy" size={52} color={Colors.sunKissedAmber} />
                 </LinearGradient>
               </View>
 
@@ -262,36 +263,8 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
                 You've explored your Dashboard, Savings Hub, and Investment Hub. Now it's time to take control, build momentum, and watch your wealth grow. You've got this! 💪
               </Text>
 
-              {/* Achievement Badge */}
-              <View
-                style={[
-                  styles.achievementBadge,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(45, 212, 191, 0.12)'
-                      : 'rgba(20, 184, 166, 0.08)',
-                    borderColor: isDark
-                      ? 'rgba(45, 212, 191, 0.25)'
-                      : 'rgba(20, 184, 166, 0.15)',
-                  },
-                ]}
-              >
-                <Ionicons name="checkmark-circle" size={18} color={Colors.electricTeal} />
-                <Text
-                  style={[
-                    Typography.titleSmall,
-                    {
-                      color: Colors.electricTeal,
-                      fontWeight: '600',
-                    },
-                  ]}
-                >
-                  Ready to Grit!
-                </Text>
-              </View>
-
               {/* Get Started Button */}
-              <PressableScale onPress={onClose} scaleValue={0.96} style={{ width: '100%', marginTop: Spacing.xl }}>
+              <PressableScale onPress={onClose} scaleValue={0.96} style={styles.buttonWrapper}>
                 <LinearGradient
                   colors={[Colors.electricTeal, Colors.glowingGreen]}
                   style={styles.button}
@@ -300,16 +273,16 @@ export function SuccessCelebration({ visible, onClose }: SuccessCelebrationProps
                 >
                   <Text
                     style={[
-                      Typography.titleLarge,
+                      Typography.titleMedium,
                       {
                         color: '#FFFFFF',
                         fontWeight: '700',
                       },
                     ]}
                   >
-                    Get Started
+                    Continue
                   </Text>
-                  <Ionicons name="rocket" size={20} color="#FFFFFF" />
+                  <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
                 </LinearGradient>
               </PressableScale>
             </LinearGradient>
@@ -338,9 +311,11 @@ const styles = StyleSheet.create({
   contentContainer: {
     borderRadius: BorderRadius.xxl + 8,
     borderWidth: 2,
-    padding: Spacing.xxl,
+    padding: Spacing.xl, // Reduced padding
     alignItems: 'center',
-    position: 'relative',
+    justifyContent: 'center',
+    width: '100%',
+    // height: '100%', // REMOVED: Allow auto height
   },
 
   // ─── Premium Icon ──────────────────────────────────────────────────────────
@@ -356,9 +331,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  trophyEmoji: {
-    fontSize: 52,
-  },
+
 
   // ─── Enhanced Sparkles ─────────────────────────────────────────────────────
   sparkle: {
@@ -385,9 +358,7 @@ const styles = StyleSheet.create({
     bottom: 115,
     right: 20,
   },
-  sparkleText: {
-    fontSize: 32,
-  },
+
 
   // ─── Badge ─────────────────────────────────────────────────────────────────
   achievementBadge: {
@@ -400,13 +371,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
 
-  // ─── Button ────────────────────────────────────────────────────────────────
+  buttonWrapper: {
+    width: '80%', // Reduced width
+    marginTop: Spacing.lg,
+  },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md, // Reduced vertical padding
+    paddingHorizontal: Spacing.lg, // Added horizontal padding
     borderRadius: BorderRadius.xxl,
     ...Platform.select({
       ios: {

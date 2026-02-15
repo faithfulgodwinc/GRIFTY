@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Tabs } from 'expo-router';
-import { ProtectedLayout } from '@fastshot/auth';
+import { View, StyleSheet, Platform, ActivityIndicator } from 'react-native';
+import { Tabs, router } from 'expo-router';
+import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { getThemeColors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -48,111 +48,122 @@ export default function TabLayout() {
     }
   }, [isTourActive]);
 
+  // Check onboarding status
+  const { profile, isLoading } = useFinancialData();
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (!profile || !profile.blueprintComplete) {
+        router.replace('/blueprint-setup');
+      }
+    }
+  }, [isLoading, profile]);
+
+  if (isLoading || !profile) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={Colors.electricTeal} />
+      </View>
+    );
+  }
+
   return (
     <ErrorBoundary>
-      <ProtectedLayout redirectTo="/(auth)/login">
       <Tabs
         screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: Colors.electricTeal,
-        tabBarInactiveTintColor: isDark ? 'rgba(139, 146, 160, 0.5)' : Colors.tertiaryText,
-        tabBarBackground: () =>
-          isDark ? (
+          headerShown: false,
+          tabBarActiveTintColor: Colors.electricTeal,
+          tabBarInactiveTintColor: isDark ? 'rgba(139, 146, 160, 0.5)' : Colors.tertiaryText,
+          tabBarBackground: () => (
             <View style={StyleSheet.absoluteFill}>
+              {/* Blur Effect */}
               <BlurView
-                intensity={40}
-                tint="dark"
+                intensity={Platform.OS === 'ios' ? 80 : 100}
+                tint={isDark ? 'dark' : 'light'}
                 style={StyleSheet.absoluteFill}
               />
+              {/* Color Overlay - High transparency for glass effect, but enough to be readable */}
               <View
                 style={[
                   StyleSheet.absoluteFill,
                   {
-                    backgroundColor: 'rgba(10, 6, 18, 0.82)',
+                    backgroundColor: isDark ? 'rgba(10, 10, 12, 0.85)' : 'rgba(255, 255, 255, 0.85)',
                     borderTopWidth: 1,
-                    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+                    borderTopColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
                   },
                 ]}
               />
             </View>
-          ) : null,
-        tabBarStyle: {
-          backgroundColor: isDark ? 'transparent' : Colors.white,
-          borderTopColor: isDark ? 'transparent' : Colors.glassBorder,
-          borderTopWidth: isDark ? 0 : 1,
-          paddingBottom: bottomPadding,
-          height: totalHeight,
-          paddingTop: 10,
-          shadowColor: isDark ? 'rgba(45, 212, 191, 0.06)' : 'rgba(0, 0, 0, 0.04)',
-          shadowOffset: { width: 0, height: isDark ? -2 : -1 },
-          shadowOpacity: 1,
-          shadowRadius: isDark ? 20 : 12,
-          elevation: isDark ? 12 : 8,
-          position: isDark ? 'absolute' : 'relative' as const,
-          ...(isDark && {
-            left: 0,
-            right: 0,
-            bottom: 0,
-          }),
-        },
-        tabBarLabelStyle: {
-          fontSize: Typography.labelSmall.fontSize,
-          fontWeight: Typography.labelSmall.fontWeight,
-          letterSpacing: Typography.labelSmall.letterSpacing,
-          marginTop: 2,
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused && isDark ? styles.activeIconGlow : undefined}>
-              <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
-            </View>
           ),
+          tabBarStyle: {
+            backgroundColor: isDark ? 'transparent' : Colors.white,
+            borderTopColor: isDark ? 'transparent' : Colors.glassBorder,
+            borderTopWidth: isDark ? 0 : 1,
+            paddingBottom: bottomPadding,
+            height: totalHeight,
+            paddingTop: 10,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 10,
+            elevation: 5,
+            position: isDark ? 'absolute' : 'relative' as const,
+            ...(isDark && {
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }),
+          },
+          tabBarLabelStyle: {
+            fontSize: Typography.labelSmall.fontSize,
+            fontWeight: Typography.labelSmall.fontWeight,
+            letterSpacing: Typography.labelSmall.letterSpacing,
+            marginTop: 4,
+          },
         }}
-      />
-      <Tabs.Screen
-        name="savings"
-        options={{
-          title: 'Savings',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused && isDark ? styles.activeIconGlow : undefined}>
-              <Ionicons name={focused ? 'wallet' : 'wallet-outline'} size={22} color={color} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="invest"
-        options={{
-          title: 'Invest',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused && isDark ? styles.activeIconGlow : undefined}>
-              <Ionicons name={focused ? 'trending-up' : 'trending-up-outline'} size={22} color={color} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="coach"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused && isDark ? styles.activeIconGlow : undefined}>
-              <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
-            </View>
-          ),
-        }}
-      />
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="savings"
+          options={{
+            title: 'Savings',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'wallet' : 'wallet-outline'} size={24} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="invest"
+          options={{
+            title: 'Invest',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'trending-up' : 'trending-up-outline'} size={24} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="coach"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
+            ),
+          }}
+        />
       </Tabs>
       <CoachMarkOverlay />
       <SuccessCelebration
@@ -162,17 +173,10 @@ export default function TabLayout() {
         }}
       />
       <GlobalPaywallWrapper />
-      </ProtectedLayout>
-    </ErrorBoundary>
+    </ErrorBoundary >
   );
 }
 
 const styles = StyleSheet.create({
-  activeIconGlow: {
-    shadowColor: '#2DD4BF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 6,
-  },
+  // Removed activeIconGlow style
 });

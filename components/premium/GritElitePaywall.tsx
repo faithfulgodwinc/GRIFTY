@@ -1,236 +1,197 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
-  ScrollView,
+  Modal,
   Dimensions,
-  Animated,
   ActivityIndicator,
-  Linking,
+  Animated,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { adapty } from 'react-native-adapty';
-import type { AdaptyPaywall, AdaptyPaywallProduct, AdaptyProfile } from 'react-native-adapty';
-import { PressableScale } from '@/components/PressableScale';
-import { getThemeColors, getGradients } from '@/constants/Colors';
-import { Typography, Spacing, BorderRadius } from '@/constants/Theme';
-import { useTheme } from '@/contexts/ThemeContext';
 import ConfettiCannon from 'react-native-confetti-cannon';
+import { PurchasesPackage } from 'react-native-purchases';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+
+import { Colors as StaticColors, Gradients as StaticGradients, getThemeColors, getGradients } from '@/constants/Colors';
+import { Spacing, BorderRadius, Typography } from '@/constants/Theme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
-interface GritifyElitePaywallProps {
+interface Props {
   visible: boolean;
-  paywall: AdaptyPaywall;
-  onSuccess: (profile: AdaptyProfile) => void;
+  packages: PurchasesPackage[];
+  onSuccess: () => void;
   onClose: () => void;
 }
 
-export function GritifyElitePaywall({
-  visible,
-  paywall,
-  onSuccess,
-  onClose,
-}: GritifyElitePaywallProps) {
-  const [products, setProducts] = useState<AdaptyPaywallProduct[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<AdaptyPaywallProduct | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isPurchasing, setIsPurchasing] = useState(false);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+const PressableScale = ({ onPress, scaleValue = 0.95, children, style, disabled }: any) => {
+  const animated = useRef(new Animated.Value(1)).current;
 
+  const handlePressIn = () => {
+    Animated.spring(animated, {
+      toValue: scaleValue,
+      useNativeDriver: true,
+      speed: 20,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(animated, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+    }).start();
+  };
+
+  return (
+    <TouchableOpacity
+      activeOpacity={1}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={onPress}
+      disabled={disabled}
+      style={style}
+    >
+      <Animated.View style={{ transform: [{ scale: animated }] }}>
+        {children}
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
+export function GritElitePaywall({ visible, packages, onSuccess, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const Colors = getThemeColors(isDark);
   const Gradients = getGradients(isDark);
+  const { purchasePackage, restorePurchases, isLoading: isContextLoading } = useSubscription();
+
+  const [selectedPackage, setSelectedPackage] = useState<PurchasesPackage | null>(null);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   // Animations
   const slideAnim = useRef(new Animated.Value(height)).current;
-  const cardShimmer = useRef(new Animated.Value(0)).current;
-  const buttonShimmer = useRef(new Animated.Value(-width)).current;
+
+
   const confettiRef = useRef<any>(null);
 
   useEffect(() => {
     if (visible) {
-      loadProducts();
-      animateIn();
-      startShimmers();
+      // Reset state
+      setError(null);
+      setIsPurchasing(false);
+      setShowCelebration(false);
+
+      // Pre-select annual or first package
+      if (packages.length > 0) {
+        const annual = packages.find(p => p.product.subscriptionPeriod === 'P1Y');
+        setSelectedPackage(annual || packages[0]);
+      }
+
+      // Enter animations
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 20,
+        stiffness: 90,
+      }).start();
+
+
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: height,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
     }
-  }, [visible]);
+  }, [visible, packages, slideAnim]);
 
-  const animateIn = () => {
-    Animated.spring(slideAnim, {
-      toValue: 0,
-      useNativeDriver: true,
-      damping: 20,
-      stiffness: 90,
-    }).start();
-  };
 
-  const animateOut = (callback: () => void) => {
+
+  const handleClose = () => {
+    if (isPurchasing) return;
     Animated.timing(slideAnim, {
       toValue: height,
       duration: 300,
       useNativeDriver: true,
-    }).start(callback);
+    }).start(() => onClose());
   };
 
-  const startShimmers = () => {
-    // Card shimmer
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(cardShimmer, {
-          toValue: 1,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(cardShimmer, {
-          toValue: 0,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
-    // Button shimmer
-    Animated.loop(
-      Animated.timing(buttonShimmer, {
-        toValue: width * 2,
-        duration: 2500,
-        useNativeDriver: true,
-      })
-    ).start();
-  };
-
-  const loadProducts = async () => {
-    try {
-      setIsLoading(true);
-      const paywallProducts = await adapty.getPaywallProducts(paywall);
-
-      // Sort products: annual first (if it's the best value)
-      const sorted = paywallProducts.sort((a, b) => {
-        const aIsAnnual = a.subscription?.subscriptionPeriod?.unit === 'year';
-        const bIsAnnual = b.subscription?.subscriptionPeriod?.unit === 'year';
-        if (aIsAnnual && !bIsAnnual) return -1;
-        if (!aIsAnnual && bIsAnnual) return 1;
-        return 0;
-      });
-
-      setProducts(sorted);
-      // Pre-select annual plan (best value)
-      const annual = sorted.find((p) => p.subscription?.subscriptionPeriod?.unit === 'year');
-      setSelectedProduct(annual || sorted[0]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load plans');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSelectProduct = (product: AdaptyPaywallProduct) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setSelectedProduct(product);
+  const handleSelectPackage = (pack: PurchasesPackage) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedPackage(pack);
+    setError(null);
   };
 
   const handlePurchase = async () => {
-    if (!selectedProduct || isPurchasing) return;
+    if (!selectedPackage) return;
 
     try {
       setIsPurchasing(true);
       setError(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      const result = await adapty.makePurchase(selectedProduct);
+      await purchasePackage(selectedPackage);
 
-      switch (result.type) {
-        case 'success':
-          // Festive sparkle haptic
-          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setShowCelebration(true);
-          confettiRef.current?.start();
+      // Success sequence
+      setShowCelebration(true);
+      confettiRef.current?.start();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-          // Wait for celebration, then close
-          setTimeout(() => {
-            onSuccess(result.profile);
-          }, 3000);
-          break;
-
-        case 'user_cancelled':
-          // User closed the dialog - no error
-          break;
-
-        case 'pending':
-          setError('Purchase is pending approval. Check back soon!');
-          break;
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Purchase failed. Please try again.');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
+      setTimeout(() => {
+        onSuccess();
+      }, 3000);
+    } catch (err: any) {
       setIsPurchasing(false);
+      setError('Purchase failed. Please try again.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
 
   const handleRestore = async () => {
     try {
       setIsPurchasing(true);
-      const profile = await adapty.restorePurchases();
-      const isPremium = profile?.accessLevels?.['premium']?.isActive ?? false;
+      setError(null);
+      const customerInfo = await restorePurchases();
+      setIsPurchasing(false);
 
-      if (isPremium) {
+      if (customerInfo?.entitlements.active['premium']) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        onSuccess(profile);
+        onSuccess();
       } else {
-        setError('No purchases found to restore.');
+        setError('No active subscriptions found to restore.');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Restore failed');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
       setIsPurchasing(false);
+      setError('Failed to restore purchases.');
     }
   };
 
-  const handleClose = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    animateOut(() => onClose());
+  const formatPeriod = (pack: PurchasesPackage) => {
+    const period = pack.product.subscriptionPeriod;
+    if (period === 'P1Y') return 'Yearly';
+    if (period === 'P1M') return 'Monthly';
+    if (period === 'P1W') return 'Weekly';
+    return 'Period';
   };
 
-  const openLink = async (url: string) => {
-    try {
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
-        await Linking.openURL(url);
-      }
-    } catch (error) {
-      console.error('Failed to open link:', error);
-    }
+  const isAnnual = (pack: PurchasesPackage) => {
+    return pack.product.subscriptionPeriod === 'P1Y';
   };
 
-  const formatPrice = (product: AdaptyPaywallProduct): string => {
-    return product.price?.localizedString || 'N/A';
-  };
-
-  const formatPeriod = (product: AdaptyPaywallProduct): string => {
-    const period = product.subscription?.subscriptionPeriod;
-    if (!period) return '';
-    const { numberOfUnits, unit } = period;
-    if (unit === 'month') return 'monthly';
-    if (unit === 'year') return 'annually';
-    return `per ${numberOfUnits} ${unit}`;
-  };
-
-  const isAnnual = (product: AdaptyPaywallProduct): boolean => {
-    return product.subscription?.subscriptionPeriod?.unit === 'year';
-  };
+  if (!visible) return null;
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
@@ -242,12 +203,21 @@ export function GritifyElitePaywall({
             styles.modalContainer,
             {
               transform: [{ translateY: slideAnim }],
-              paddingTop: insets.top + 20,
-              paddingBottom: Math.max(insets.bottom, 20),
+              paddingTop: insets.top + 10,
+              paddingBottom: Math.max(insets.bottom, 10),
             },
           ]}
         >
-          <LinearGradient colors={Gradients.background} style={styles.gradientContainer}>
+          <View
+            style={[
+              styles.gradientContainer,
+              {
+                backgroundColor: isDark ? '#0A0612' : '#FFFFFF',
+                padding: Spacing.md,
+                borderRadius: BorderRadius.xxl,
+              }
+            ]}
+          >
             {/* Header */}
             <View style={styles.header}>
               <PressableScale onPress={handleClose} scaleValue={0.9}>
@@ -260,117 +230,38 @@ export function GritifyElitePaywall({
                     },
                   ]}
                 >
-                  <Ionicons name="close" size={24} color={Colors.silverGrey} />
+                  <Ionicons name="close" size={20} color={Colors.silverGrey} />
                 </View>
               </PressableScale>
             </View>
 
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Hero Card - Virtual Member Card */}
-              <View style={styles.heroSection}>
-                <Animated.View
-                  style={[
-                    styles.memberCardOuter,
-                    {
-                      opacity: cardShimmer.interpolate({
-                        inputRange: [0, 0.5, 1],
-                        outputRange: [1, 0.85, 1],
-                      }),
-                    },
-                  ]}
-                >
-                  <LinearGradient
-                    colors={[Colors.electricTeal, Colors.amethyst]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.memberCardBorder}
-                  >
-                    <BlurView intensity={isDark ? 50 : 30} tint={isDark ? 'dark' : 'light'} style={styles.memberCardBlur}>
-                      <View
-                        style={[
-                          styles.memberCardInner,
-                          { backgroundColor: isDark ? 'rgba(20, 10, 36, 0.95)' : 'rgba(255, 255, 255, 0.95)' },
-                        ]}
-                      >
-                        <View style={styles.cardHeader}>
-                          <Text style={[styles.cardTitle, { color: Colors.primaryText }]}>GRITIFY ELITE</Text>
-                          <View style={styles.cardBadge}>
-                            <LinearGradient
-                              colors={[Colors.electricTeal, Colors.glowingGreen]}
-                              style={styles.badgeGradient}
-                            >
-                              <Text style={styles.badgeText}>VIP</Text>
-                            </LinearGradient>
-                          </View>
-                        </View>
-                        <Text style={[styles.cardSubtitle, { color: Colors.silverGrey }]}>
-                          Premium Mom-Boss Access
-                        </Text>
-                      </View>
-                    </BlurView>
-                  </LinearGradient>
-                </Animated.View>
+            {/* Premium Heading */}
+            <View style={styles.premiumHeadingSection}>
+              <Text style={[styles.premiumTitle, { color: Colors.primaryText }]}>
+                Grit Premium
+              </Text>
+              <Text style={[styles.premiumSubtitle, { color: Colors.silverGrey }]}>
+                Unlock advanced financial tools and AI coaching
+              </Text>
+            </View>
 
-                <Text style={[styles.heroTitle, { color: Colors.primaryText }]}>
-                  Unlock Your{'\n'}Financial Power
-                </Text>
-                <Text style={[styles.heroSubtitle, { color: Colors.secondaryText }]}>
-                  Join elite moms achieving their money goals
-                </Text>
-              </View>
-
-              {/* Feature List */}
-              <View style={styles.featuresSection}>
-                <FeatureRow
-                  icon="sparkles"
-                  title="Newell AI Coach"
-                  subtitle="24/7 personal financial assistant"
-                  isDark={isDark}
-                  Colors={Colors}
-                />
-                <FeatureRow
-                  icon="analytics"
-                  title="Advanced Financial Hubs"
-                  subtitle="Smart Shopper, Premium Savings Tools"
-                  isDark={isDark}
-                  Colors={Colors}
-                />
-                <FeatureRow
-                  icon="trophy"
-                  title="Exclusive Challenges"
-                  subtitle="Bonus rewards and streak boosters"
-                  isDark={isDark}
-                  Colors={Colors}
-                />
-                <FeatureRow
-                  icon="lock-closed"
-                  title="Priority Support"
-                  subtitle="Direct access to our elite team"
-                  isDark={isDark}
-                  Colors={Colors}
-                />
-              </View>
-
+            <View style={styles.contentContainer}>
               {/* Plan Selection */}
-              {isLoading ? (
+              {isContextLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={Colors.electricTeal} />
                   <Text style={[styles.loadingText, { color: Colors.silverGrey }]}>Loading plans...</Text>
                 </View>
               ) : (
                 <View style={styles.plansSection}>
-                  {products.map((product) => {
-                    const selected = selectedProduct?.vendorProductId === product.vendorProductId;
-                    const annual = isAnnual(product);
+                  {packages.map((pack) => {
+                    const selected = selectedPackage?.identifier === pack.identifier;
+                    const annual = isAnnual(pack);
 
                     return (
                       <PressableScale
-                        key={product.vendorProductId}
-                        onPress={() => handleSelectProduct(product)}
+                        key={pack.identifier}
+                        onPress={() => handleSelectPackage(pack)}
                         scaleValue={0.97}
                       >
                         <View
@@ -381,8 +272,8 @@ export function GritifyElitePaywall({
                               borderColor: selected
                                 ? Colors.electricTeal
                                 : isDark
-                                ? 'rgba(45, 212, 191, 0.2)'
-                                : Colors.glassBorder,
+                                  ? 'rgba(45, 212, 191, 0.2)'
+                                  : Colors.glassBorder,
                               borderWidth: selected ? 2 : 1,
                             },
                           ]}
@@ -422,11 +313,13 @@ export function GritifyElitePaywall({
                                   {annual ? 'Annual Mastery' : 'Monthly Growth'}
                                 </Text>
                                 <Text style={[styles.planPeriod, { color: Colors.silverGrey }]}>
-                                  Billed {formatPeriod(product)}
+                                  Billed {formatPeriod(pack)}
                                 </Text>
                               </View>
                             </View>
-                            <Text style={[styles.planPrice, { color: Colors.primaryText }]}>{formatPrice(product)}</Text>
+                            <Text style={[styles.planPrice, { color: Colors.primaryText }]}>
+                              {pack.product.priceString}
+                            </Text>
                           </View>
                         </View>
                       </PressableScale>
@@ -446,7 +339,7 @@ export function GritifyElitePaywall({
               {/* Purchase Button */}
               <PressableScale
                 onPress={handlePurchase}
-                disabled={isPurchasing || isLoading || !selectedProduct}
+                disabled={isPurchasing || isContextLoading || !selectedPackage}
                 scaleValue={0.97}
                 style={styles.purchaseButtonContainer}
               >
@@ -454,7 +347,7 @@ export function GritifyElitePaywall({
                   style={[
                     styles.purchaseButtonOuter,
                     {
-                      opacity: isPurchasing || isLoading ? 0.5 : 1,
+                      opacity: isPurchasing || isContextLoading ? 0.5 : 1,
                     },
                   ]}
                 >
@@ -464,43 +357,33 @@ export function GritifyElitePaywall({
                     end={{ x: 1, y: 0 }}
                     style={styles.purchaseButtonGradient}
                   >
-                    {/* Shimmer overlay */}
-                    <Animated.View
-                      style={[
-                        styles.shimmerOverlay,
-                        {
-                          transform: [{ translateX: buttonShimmer }],
-                        },
-                      ]}
-                    />
+
 
                     {isPurchasing ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
-                      <Text style={styles.purchaseButtonText}>Unlock Elite Access</Text>
+                      <Text style={styles.purchaseButtonText}>Unlock</Text>
                     )}
                   </LinearGradient>
                 </Animated.View>
               </PressableScale>
 
               {/* Restore & Links */}
-              <View style={styles.footerLinks}>
-                <TouchableOpacity onPress={handleRestore} disabled={isPurchasing}>
-                  <Text style={[styles.linkText, { color: Colors.electricTeal }]}>Restore Purchases</Text>
+              <View style={styles.legalLinks}>
+                <TouchableOpacity onPress={() => { }}>
+                  <Text style={[styles.legalText, { color: Colors.tertiaryText }]}>Terms</Text>
                 </TouchableOpacity>
-
-                <View style={styles.legalLinks}>
-                  <TouchableOpacity onPress={() => openLink('https://yourapp.com/terms')}>
-                    <Text style={[styles.legalText, { color: Colors.tertiaryText }]}>Terms of Service</Text>
-                  </TouchableOpacity>
-                  <Text style={[styles.legalSeparator, { color: Colors.tertiaryText }]}>•</Text>
-                  <TouchableOpacity onPress={() => openLink('https://yourapp.com/privacy')}>
-                    <Text style={[styles.legalText, { color: Colors.tertiaryText }]}>Privacy Policy</Text>
-                  </TouchableOpacity>
-                </View>
+                <Text style={[styles.legalSeparator, { color: Colors.tertiaryText }]}>•</Text>
+                <TouchableOpacity onPress={() => { }}>
+                  <Text style={[styles.legalText, { color: Colors.tertiaryText }]}>Privacy</Text>
+                </TouchableOpacity>
+                <Text style={[styles.legalSeparator, { color: Colors.tertiaryText }]}>•</Text>
+                <TouchableOpacity onPress={handleRestore} disabled={isPurchasing}>
+                  <Text style={[styles.linkText, { color: Colors.electricTeal }]}>Restore</Text>
+                </TouchableOpacity>
               </View>
-            </ScrollView>
-          </LinearGradient>
+            </View>
+          </View>
         </Animated.View>
 
         {/* Celebration Overlay */}
@@ -520,9 +403,9 @@ export function GritifyElitePaywall({
               >
                 <Text style={styles.celebrationEmoji}>👑</Text>
               </LinearGradient>
-              <Text style={[styles.celebrationTitle, { color: Colors.primaryText }]}>Welcome to Elite!</Text>
+              <Text style={[styles.celebrationTitle, { color: Colors.primaryText }]}>Welcome to Grit Elite!</Text>
               <Text style={[styles.celebrationSubtitle, { color: Colors.secondaryText }]}>
-                You&apos;re now a Gritify VIP Mom-Boss
+                You&apos;re now a Grit VIP Mom-Boss
               </Text>
             </View>
           </View>
@@ -565,12 +448,15 @@ function FeatureRow({ icon, title, subtitle, isDark, Colors }: FeatureRowProps) 
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContainer: {
-    height: height * 0.92,
-    borderTopLeftRadius: BorderRadius.xxl + 8,
-    borderTopRightRadius: BorderRadius.xxl + 8,
+    width: '90%',
+    maxWidth: 500,
+    height: '85%',
+    maxHeight: 700,
+    borderRadius: BorderRadius.xxl + 8,
     overflow: 'hidden',
   },
   gradientContainer: {
@@ -578,7 +464,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
     alignItems: 'flex-end',
   },
   closeButton: {
@@ -588,23 +474,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
+    opacity: 0, // Hide close button visually but keep layout if needed, or just remove
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
+
+  // Premium Heading
+  premiumHeadingSection: {
+    alignItems: 'center',
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xl,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
+  },
+  premiumTitle: {
+    ...Typography.headlineLarge,
+    fontWeight: '800',
+    marginBottom: Spacing.xs,
+    textAlign: 'center',
+  },
+  premiumSubtitle: {
+    ...Typography.bodySmall,
+    textAlign: 'center',
+    opacity: 0.8,
+  },
+
+  contentContainer: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
   },
 
   // Hero Section
   heroSection: {
     alignItems: 'center',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.sm, // Reduced
   },
   memberCardOuter: {
     width: '100%',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.xs, // Reduced
+    transform: [{ scale: 0.85 }], // Reduced scale
   },
   memberCardBorder: {
     borderRadius: BorderRadius.xl + 4,
@@ -646,29 +551,32 @@ const styles = StyleSheet.create({
     ...Typography.bodyMedium,
   },
   heroTitle: {
-    ...Typography.displaySmall,
+    ...Typography.headlineMedium, // Smaller than displaySmall
     textAlign: 'center',
-    marginBottom: Spacing.sm,
+    marginBottom: 0,
+    fontWeight: '700',
   },
   heroSubtitle: {
-    ...Typography.bodyLarge,
+    ...Typography.bodyMedium, // Smaller than bodyLarge
     textAlign: 'center',
+    color: 'transparent', // Hide subtitle to save space
+    height: 0,
   },
 
   // Features
   featuresSection: {
-    marginBottom: Spacing.xl,
-    gap: Spacing.md,
+    marginBottom: Spacing.md, // Reduced
+    gap: 4, // Tighter gap
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.xs,
   },
   featureIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.lg,
+    width: 28, // Reduced from 36
+    height: 28, // Reduced from 36
+    borderRadius: BorderRadius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -685,13 +593,17 @@ const styles = StyleSheet.create({
 
   // Plans
   plansSection: {
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+    width: '100%',
+    paddingHorizontal: Spacing.lg,
   },
   planCard: {
     borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
+    padding: Spacing.md,
     position: 'relative',
+    borderWidth: 2,
   },
   bestValueBadge: {
     position: 'absolute',
@@ -718,6 +630,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
+    flex: 1,
+    paddingRight: Spacing.md,
   },
   radioOuter: {
     width: 24,
@@ -740,8 +654,9 @@ const styles = StyleSheet.create({
     ...Typography.bodySmall,
   },
   planPrice: {
-    ...Typography.headlineSmall,
+    ...Typography.titleLarge,
     fontWeight: '700',
+    textAlign: 'right',
   },
 
   // Loading & Error
@@ -768,14 +683,21 @@ const styles = StyleSheet.create({
 
   // Purchase Button
   purchaseButtonContainer: {
-    marginBottom: Spacing.lg,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.xl,
   },
   purchaseButtonOuter: {
-    borderRadius: BorderRadius.xxl,
+    borderRadius: BorderRadius.xl,
     overflow: 'hidden',
+    shadowColor: '#2DD4BF',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
   purchaseButtonGradient: {
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -800,7 +722,8 @@ const styles = StyleSheet.create({
   // Footer
   footerLinks: {
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
   },
   linkText: {
     ...Typography.labelLarge,
@@ -816,34 +739,43 @@ const styles = StyleSheet.create({
   },
   legalSeparator: {
     ...Typography.bodySmall,
+    marginHorizontal: Spacing.xs,
   },
-
-  // Celebration
   celebrationOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   celebrationContent: {
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.xl,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+    transform: [{ scale: 1.1 }],
   },
   celebrationIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   celebrationEmoji: {
-    fontSize: 50,
+    fontSize: 32,
   },
   celebrationTitle: {
-    ...Typography.displaySmall,
+    ...Typography.headlineSmall,
+    fontWeight: '700',
     marginBottom: Spacing.xs,
   },
   celebrationSubtitle: {
-    ...Typography.bodyLarge,
+    ...Typography.bodyMedium,
+    textAlign: 'center',
   },
 });

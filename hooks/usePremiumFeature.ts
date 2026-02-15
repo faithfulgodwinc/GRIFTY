@@ -1,6 +1,8 @@
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import * as Haptics from 'expo-haptics';
 
+import { Alert } from 'react-native';
+
 /**
  * Hook to gate premium features
  *
@@ -15,7 +17,7 @@ import * as Haptics from 'expo-haptics';
  * ```
  */
 export function usePremiumFeature() {
-  const { isPremium, showPaywall } = useSubscription();
+  const { isPremium, showPaywall, packages, isLoading } = useSubscription();
 
   /**
    * Check if user has premium access, show paywall if not
@@ -24,6 +26,19 @@ export function usePremiumFeature() {
   const requirePremium = (): boolean => {
     if (isPremium) {
       return true;
+    }
+
+    if (isLoading) {
+      Alert.alert('Please wait', 'Loading premium features...');
+      return false;
+    }
+
+    if (packages.length === 0) {
+      Alert.alert(
+        'Connection Error',
+        'Unable to load premium features. Please check your internet connection.'
+      );
+      return false;
     }
 
     // Show paywall with haptic feedback

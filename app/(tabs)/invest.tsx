@@ -6,10 +6,11 @@ import {
   ScrollView,
   Dimensions,
   Animated,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getThemeColors, getGradients } from '@/constants/Colors';
-import { Typography, Spacing, BorderRadius } from '@/constants/Theme';
+import { Colors, Gradients, getGradients, getThemeColors } from '@/constants/Colors';
+import { Typography, Spacing, BorderRadius, Shadows } from '@/constants/Theme';
 import { GlassCard } from '@/components/GlassCard';
 import { PressableScale } from '@/components/PressableScale';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,10 +55,10 @@ interface InvestmentVehicle {
 }
 
 const MARKET_DATA: MarketData[] = [
-  { name: 'S&P 500', symbol: 'SPX', value: '5,875', change: 1.2, icon: '📈' },
-  { name: 'Gold', symbol: 'GLD', value: '£2,645', change: 0.8, icon: '🏆' },
-  { name: 'Tech Index', symbol: 'QQQ', value: '512', change: 2.1, icon: '💻' },
-  { name: 'Oil', symbol: 'WTI', value: '£78.45', change: -0.5, icon: '🛢️' },
+  { name: 'S&P 500', symbol: 'SPX', value: '5,875', change: 1.2, icon: 'trending-up' },
+  { name: 'Gold', symbol: 'GLD', value: '£2,645', change: 0.8, icon: 'layers' },
+  { name: 'Tech Index', symbol: 'QQQ', value: '512', change: 2.1, icon: 'hardware-chip' },
+  { name: 'Oil', symbol: 'WTI', value: '£78.45', change: -0.5, icon: 'water' },
 ];
 
 const INVESTMENT_VEHICLES: InvestmentVehicle[] = [
@@ -71,7 +72,7 @@ const INVESTMENT_VEHICLES: InvestmentVehicle[] = [
     description:
       'Broad market exposure with minimal fees. Perfect for long-term wealth building.',
     expertVerified: true,
-    icon: '📊',
+    icon: 'bar-chart',
     color: '#10B981',
   },
   {
@@ -84,7 +85,7 @@ const INVESTMENT_VEHICLES: InvestmentVehicle[] = [
     description:
       'FDIC-insured savings with competitive interest rates. Zero risk, steady growth.',
     expertVerified: true,
-    icon: '💰',
+    icon: 'wallet',
     color: '#14B8A6',
   },
   {
@@ -97,7 +98,7 @@ const INVESTMENT_VEHICLES: InvestmentVehicle[] = [
     description:
       'Quality companies with consistent dividend payments. Income + growth.',
     expertVerified: true,
-    icon: '💵',
+    icon: 'cash',
     color: '#F59E0B',
   },
   {
@@ -110,7 +111,7 @@ const INVESTMENT_VEHICLES: InvestmentVehicle[] = [
     description:
       'Stable income from government and corporate bonds. Lower volatility.',
     expertVerified: true,
-    icon: '📜',
+    icon: 'document-text',
     color: '#6366F1',
   },
   {
@@ -123,7 +124,7 @@ const INVESTMENT_VEHICLES: InvestmentVehicle[] = [
     description:
       'High-growth technology companies. Higher risk, higher potential returns.',
     expertVerified: true,
-    icon: '🚀',
+    icon: 'rocket',
     color: '#8B5CF6',
   },
   {
@@ -136,8 +137,47 @@ const INVESTMENT_VEHICLES: InvestmentVehicle[] = [
     description:
       'Diversified real estate investment trust. Rental income + property appreciation.',
     expertVerified: true,
-    icon: '🏠',
+    icon: 'home',
     color: '#EC4899',
+  },
+];
+
+const VERIFIED_RESOURCES = [
+  {
+    id: '1',
+    title: 'The Financial Diet',
+    type: 'YouTube',
+    description: 'Personal finance for the rest of us.',
+    icon: 'logo-youtube',
+    color: '#FF0000',
+    link: 'https://www.youtube.com/c/thefinancialdiet',
+  },
+  {
+    id: '2',
+    title: 'Morning Brew',
+    type: 'Newsletter',
+    description: 'Daily business news found in your inbox.',
+    icon: 'mail',
+    color: '#6C5CE7',
+    link: 'https://www.morningbrew.com',
+  },
+  {
+    id: '3',
+    title: 'Graham Stephan',
+    type: 'YouTube',
+    description: 'Real estate investing and financial independence.',
+    icon: 'logo-youtube',
+    color: '#FF0000',
+    link: 'https://www.youtube.com/c/GrahamStephan',
+  },
+  {
+    id: '4',
+    title: 'The Hustle',
+    type: 'Newsletter',
+    description: 'Tech and business news for the smart.',
+    icon: 'mail',
+    color: '#00BFA5',
+    link: 'https://thehustle.co',
   },
 ];
 
@@ -195,25 +235,30 @@ function PulsingDot({ color }: { color: string }) {
   );
 }
 
+// ... imports
+// import { useRouter } from 'expo-router'; // Removed
+
 export default function InvestScreen() {
   const [selectedVehicle, setSelectedVehicle] =
     useState<InvestmentVehicle | null>(null);
   const [timeHorizon] = useState(10);
+
   const { theme } = useTheme();
-  const _insets = useSafeAreaInsets();
+  const isDark = theme === 'dark';
+  const Colors = getThemeColors(isDark);
+  const Gradients = getGradients(isDark);
+
+  const insets = useSafeAreaInsets();
   const {
     profile,
     financialData,
     totalSavings,
   } = useFinancialData();
 
-  const isDark = theme === 'dark';
-  const Colors = getThemeColors(isDark);
-  const Gradients = getGradients(isDark);
-
   const currency = profile?.currency || financialData?.currency || '£';
   const monthlySavings = financialData?.monthlySavings || 0;
   const savingsGoal = financialData?.savingsGoal || profile?.savingsGoal || 0;
+
   // Use real monthly savings or savings goal for investment projections
   const investmentAmount = monthlySavings > 0 ? monthlySavings : savingsGoal > 0 ? savingsGoal : 500;
 
@@ -288,31 +333,24 @@ export default function InvestScreen() {
   };
 
   return (
-    <LinearGradient colors={Gradients.background} style={styles.container}>
+    <View style={styles.container}>
+      <LinearGradient colors={Gradients.mesh} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + 120 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text
-              style={[
-                styles.title,
-                Typography.displaySmall,
-                { color: Colors.primaryText },
-              ]}
-            >
-              Investment Hub
+            <Text style={[Typography.labelMedium, styles.headerBrand]}>
+              MARKET PULSE
             </Text>
-            <Text
-              style={[
-                styles.subtitle,
-                Typography.titleSmall,
-                { color: Colors.electricTeal },
-              ]}
-            >
-              Expert-verified wealth building
+            <Text style={[Typography.displaySmall, styles.headerTitle, { color: isDark ? Colors.white : Colors.primaryText }]}>
+              Build Your Portfolio
             </Text>
           </View>
           <PressableScale
@@ -320,18 +358,10 @@ export default function InvestScreen() {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
             }
             scaleValue={0.92}
-            style={[
-              styles.infoButton,
-              {
-                backgroundColor: isDark
-                  ? Colors.cardBackground
-                  : Colors.white,
-                borderColor: Colors.glassBorder,
-              },
-            ]}
+            style={styles.infoButton}
           >
             <Ionicons
-              name="information-circle-outline"
+              name="analytics-outline"
               size={24}
               color={Colors.electricTeal}
             />
@@ -339,13 +369,13 @@ export default function InvestScreen() {
         </View>
 
         {/* Your Savings Power Card */}
-        <GlassCard style={{ marginBottom: Spacing.lg, marginHorizontal: Spacing.lg }}>
+        <GlassCard style={{ marginBottom: Spacing.lg, marginHorizontal: Spacing.md }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View>
               <Text style={[Typography.labelMedium, { color: Colors.tertiaryText, marginBottom: 4 }]}>
-                Your Investment Power
+                INVESTABLE ASSETS
               </Text>
-              <Text style={[Typography.headlineMedium, { color: Colors.electricTeal, fontWeight: '800' }]}>
+              <Text style={[Typography.displayMedium, { color: Colors.electricTeal, fontWeight: '800' }]}>
                 {currency}{totalSavings.toFixed(0)}
               </Text>
               <Text style={[Typography.bodySmall, { color: Colors.secondaryText, marginTop: 2 }]}>
@@ -354,7 +384,7 @@ export default function InvestScreen() {
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={[Typography.labelMedium, { color: Colors.tertiaryText, marginBottom: 4 }]}>
-                Monthly Goal
+                MONTHLY GOAL
               </Text>
               <Text style={[Typography.titleLarge, { color: Colors.amethyst, fontWeight: '700' }]}>
                 {currency}{savingsGoal.toFixed(0)}
@@ -371,21 +401,11 @@ export default function InvestScreen() {
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleContainer}>
               <PulsingDot color={Colors.glowingGreen} />
-              <Text
-                style={[
-                  Typography.headlineSmall,
-                  { color: Colors.primaryText },
-                ]}
-              >
-                Live Market Pulse
+              <Text style={[Typography.titleLarge, { color: Colors.primaryText, marginLeft: 8 }]}>
+                Market Pulse
               </Text>
             </View>
-            <Text
-              style={[
-                Typography.bodySmall,
-                { color: Colors.tertiaryText },
-              ]}
-            >
+            <Text style={[Typography.bodySmall, { color: Colors.tertiaryText }]}>
               Updated 2m ago
             </Text>
           </View>
@@ -405,7 +425,7 @@ export default function InvestScreen() {
                 delay={index * 120}
               >
                 <View style={styles.marketHeader}>
-                  <Text style={styles.marketIcon}>{market.icon}</Text>
+                  <Ionicons name={market.icon as any} size={24} color={Colors.electricTeal} />
                   <View
                     style={[
                       styles.changeIndicator,
@@ -413,7 +433,7 @@ export default function InvestScreen() {
                         backgroundColor:
                           market.change >= 0
                             ? Colors.glowingGreen
-                            : Colors.error,
+                            : Colors.radiantMagenta,
                       },
                     ]}
                   >
@@ -438,7 +458,7 @@ export default function InvestScreen() {
                 </Text>
                 <Text
                   style={[
-                    Typography.headlineSmall,
+                    Typography.titleLarge,
                     { color: Colors.primaryText, marginBottom: Spacing.xs },
                   ]}
                 >
@@ -451,7 +471,7 @@ export default function InvestScreen() {
                       color:
                         market.change >= 0
                           ? Colors.glowingGreen
-                          : Colors.error,
+                          : Colors.radiantMagenta,
                       fontWeight: '700',
                     },
                   ]}
@@ -464,22 +484,62 @@ export default function InvestScreen() {
           </ScrollView>
         </View>
 
+        {/* Verified Resources Section */}
+        <View style={styles.resourcesSection}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleContainer}>
+              <Ionicons name="school-outline" size={24} color={Colors.amethyst} />
+              <Text style={[Typography.titleLarge, { color: Colors.primaryText, marginLeft: 8 }]}>
+                Learn to Invest
+              </Text>
+            </View>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.resourcesList}
+            snapToInterval={260}
+            decelerationRate="fast"
+          >
+            {VERIFIED_RESOURCES.map((resource, index) => (
+              <GlassCard
+                key={resource.id}
+                style={styles.resourceCard}
+                animated
+                delay={index * 100}
+              >
+                <View style={styles.resourceHeader}>
+                  <View style={[styles.resourceIcon, { backgroundColor: resource.color + '15' }]}>
+                    <Ionicons name={resource.icon as any} size={20} color={resource.color} />
+                  </View>
+                  <View style={[styles.resourceBadge, { backgroundColor: resource.color + '10' }]}>
+                    <Text style={[styles.resourceType, { color: resource.color }]}>
+                      {resource.type}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[Typography.titleMedium, { color: Colors.primaryText, marginBottom: 4 }]}>
+                  {resource.title}
+                </Text>
+                <Text style={[Typography.bodySmall, { color: Colors.tertiaryText }]} numberOfLines={2}>
+                  {resource.description}
+                </Text>
+              </GlassCard>
+            ))}
+          </ScrollView>
+        </View>
+
         {/* Expert-Verified Investment Vehicles */}
         <View style={styles.vehiclesSection}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleContainer}>
               <Ionicons
                 name="shield-checkmark"
-                size={20}
+                size={24}
                 color={Colors.electricTeal}
               />
-              <Text
-                style={[
-                  Typography.headlineSmall,
-                  { color: Colors.primaryText },
-                ]}
-              >
-                Expert-Verified Vehicles
+              <Text style={[Typography.titleLarge, { color: Colors.primaryText, marginLeft: 8 }]}>
+                Verified Vehicles
               </Text>
             </View>
           </View>
@@ -495,42 +555,12 @@ export default function InvestScreen() {
                   scaleValue={0.98}
                   style={styles.vehicleCardWrapper}
                 >
-                  <LinearGradient
-                    colors={
-                      isSelected
-                        ? ([
-                            Colors.electricTeal + '15',
-                            Colors.amethyst + '15',
-                          ] as const)
-                        : isDark
-                          ? ([
-                              'rgba(20, 10, 36, 0.85)',
-                              'rgba(20, 10, 36, 0.85)',
-                            ] as const)
-                          : ([Colors.white, Colors.white] as const)
-                    }
+                  <GlassCard
                     style={[
-                      styles.vehicleCardGradient,
-                      {
-                        borderColor: isSelected
-                          ? Colors.electricTeal
-                          : Colors.glassBorder,
-                        borderWidth: isSelected ? 2 : 1,
-                      },
+                      styles.vehicleCard,
+                      isSelected && { borderColor: Colors.electricTeal, borderWidth: 2 }
                     ]}
                   >
-                    {/* Selected glow overlay */}
-                    {isSelected && (
-                      <View
-                        style={[
-                          styles.selectedGlowOverlay,
-                          {
-                            shadowColor: Colors.electricTeal,
-                          },
-                        ]}
-                      />
-                    )}
-
                     <View style={styles.vehicleHeader}>
                       <View
                         style={[
@@ -538,15 +568,13 @@ export default function InvestScreen() {
                           { backgroundColor: vehicle.color + '20' },
                         ]}
                       >
-                        <Text style={styles.vehicleEmoji}>
-                          {vehicle.icon}
-                        </Text>
+                        <Ionicons name={vehicle.icon as any} size={24} color={vehicle.color} />
                       </View>
                       <View style={styles.vehicleInfo}>
                         <View style={styles.vehicleTopRow}>
                           <Text
                             style={[
-                              Typography.titleLarge,
+                              Typography.titleMedium,
                               {
                                 color: Colors.primaryText,
                                 flex: 1,
@@ -717,298 +745,88 @@ export default function InvestScreen() {
                           >
                             Growth Projection
                           </Text>
-                          <Text
-                            style={[
-                              Typography.bodySmall,
-                              { color: Colors.tertiaryText },
-                            ]}
-                          >
-                            {currency}{investmentAmount.toLocaleString()} over{' '}
-                            {timeHorizon} years
+                          <Text style={[Typography.bodySmall, { color: Colors.secondaryText }]}>
+                            {timeHorizon} Years @ {currency}{monthlySavings}/mo
                           </Text>
                         </View>
 
                         <View style={styles.chartContainer}>
-                          <Svg
-                            width={width - 80}
-                            height={130}
-                          >
+                          <Svg height="120" width={width - 80}>
                             <Defs>
-                              <SvgGradient
-                                id={`chartGrad-${vehicle.id}`}
-                                x1="0"
-                                y1="0"
-                                x2="0"
-                                y2="1"
-                              >
-                                <Stop
-                                  offset="0%"
-                                  stopColor={vehicle.color}
-                                  stopOpacity="0.35"
-                                />
-                                <Stop
-                                  offset="100%"
-                                  stopColor={vehicle.color}
-                                  stopOpacity="0.02"
-                                />
+                              <SvgGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                                <Stop offset="0" stopColor={vehicle.color} stopOpacity="0.4" />
+                                <Stop offset="1" stopColor={vehicle.color} stopOpacity="0" />
                               </SvgGradient>
                             </Defs>
-
-                            {/* Grid lines */}
-                            <Line
-                              x1={0}
-                              y1={120}
-                              x2={width - 80}
-                              y2={120}
-                              stroke={Colors.glassBorder}
-                              strokeWidth={1}
-                              strokeDasharray="4,4"
-                            />
-                            <Line
-                              x1={0}
-                              y1={80}
-                              x2={width - 80}
-                              y2={80}
-                              stroke={Colors.glassBorder}
-                              strokeWidth={1}
-                              strokeDasharray="4,4"
-                            />
-                            <Line
-                              x1={0}
-                              y1={40}
-                              x2={width - 80}
-                              y2={40}
-                              stroke={Colors.glassBorder}
-                              strokeWidth={1}
-                              strokeDasharray="4,4"
-                            />
-
-                            {/* Gradient fill under curve */}
                             <Path
                               d={generateFillPath(vehicle)}
-                              fill={`url(#chartGrad-${vehicle.id})`}
+                              fill="url(#grad)"
                             />
-
-                            {/* Smooth growth curve */}
                             <Path
                               d={generateCurvePath(vehicle)}
                               stroke={vehicle.color}
-                              strokeWidth={3}
+                              strokeWidth="3"
                               fill="none"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-
-                            {/* Start point */}
-                            <Circle
-                              cx={0}
-                              cy={
-                                120 -
-                                (1 / Math.pow(1 + vehicle.historicalReturn / 100, timeHorizon)) *
-                                  120 *
-                                  0.7 -
-                                15
-                              }
-                              r={4}
-                              fill={vehicle.color}
-                              opacity={0.6}
-                            />
-
-                            {/* End point with halo */}
-                            <Circle
-                              cx={width - 80}
-                              cy={15}
-                              r={10}
-                              fill={vehicle.color}
-                              opacity={0.15}
-                            />
-                            <Circle
-                              cx={width - 80}
-                              cy={15}
-                              r={6}
-                              fill={vehicle.color}
                             />
                           </Svg>
                         </View>
 
-                        <View style={styles.projectionResult}>
-                          <View style={styles.projectionItem}>
-                            <Text
-                              style={[
-                                Typography.labelMedium,
-                                {
-                                  color: Colors.tertiaryText,
-                                  marginBottom: Spacing.xs,
-                                },
-                              ]}
-                            >
-                              Initial Investment
-                            </Text>
-                            <Text
-                              style={[
-                                Typography.titleLarge,
-                                {
-                                  color: Colors.secondaryText,
-                                },
-                              ]}
-                            >
-                              {currency}
-                              {investmentAmount.toLocaleString()}
-                            </Text>
-                          </View>
-                          <Ionicons
-                            name="arrow-forward"
-                            size={20}
-                            color={Colors.mediumGray}
-                          />
-                          <View
-                            style={[
-                              styles.projectionItem,
-                              { alignItems: 'flex-end' },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                Typography.labelMedium,
-                                {
-                                  color: Colors.tertiaryText,
-                                  marginBottom: Spacing.xs,
-                                },
-                              ]}
-                            >
-                              Projected Value
-                            </Text>
-                            <Text
-                              style={[
-                                Typography.titleLarge,
-                                {
-                                  color: vehicle.color,
-                                  fontWeight: '800',
-                                },
-                              ]}
-                            >
-                              {currency}
-                              {calculateProjectedReturn(
-                                vehicle,
-                                investmentAmount,
-                                timeHorizon,
-                              ).toFixed(0)}
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View
-                          style={[
-                            styles.returnHighlight,
-                            {
-                              backgroundColor:
-                                vehicle.color + '15',
-                              borderColor:
-                                vehicle.color + '20',
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            name="trending-up"
-                            size={20}
-                            color={vehicle.color}
-                          />
-                          <Text
-                            style={[
-                              Typography.titleSmall,
-                              {
-                                color: vehicle.color,
-                                fontWeight: '700',
-                                flex: 1,
-                              },
-                            ]}
-                          >
-                            Potential Return: {currency}
-                            {(
-                              calculateProjectedReturn(
-                                vehicle,
-                                investmentAmount,
-                                timeHorizon,
-                              ) - investmentAmount
-                            ).toFixed(0)}{' '}
-                            ({vehicle.historicalReturn}% annually)
+                        <View style={styles.projectedValueContainer}>
+                          <Text style={[Typography.titleSmall, { color: Colors.tertiaryText }]}>
+                            Projected Value
+                          </Text>
+                          <Text style={[Typography.displaySmall, { color: vehicle.color }]}>
+                            {currency}{calculateProjectedReturn(vehicle, investmentAmount * 12 * 10, 1).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </Text>
                         </View>
                       </View>
                     )}
-                  </LinearGradient>
+                  </GlassCard>
                 </PressableScale>
               );
             })}
           </View>
         </View>
-
-        {/* Disclaimer */}
-        <GlassCard style={styles.disclaimerCardOuter} animated delay={200}>
-          <View style={styles.disclaimerHeader}>
-            <Ionicons
-              name="alert-circle-outline"
-              size={20}
-              color={Colors.sunKissedAmber}
-            />
-            <Text
-              style={[
-                Typography.titleSmall,
-                { color: Colors.primaryText, fontWeight: '700' },
-              ]}
-            >
-              Important Notice
-            </Text>
-          </View>
-          <Text
-            style={[
-              Typography.bodySmall,
-              { color: Colors.secondaryText, lineHeight: 20 },
-            ]}
-          >
-            Historical returns are not guaranteed. All investments carry risk.
-            Past performance does not guarantee future results. Consult a
-            financial advisor before investing.
-          </Text>
-        </GlassCard>
-      </ScrollView>
-    </LinearGradient>
+      </ScrollView >
+    </View >
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.richBlack,
   },
   scrollContent: {
-    paddingTop: 60,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 140,
+    paddingBottom: 40,
   },
   header: {
+    marginBottom: Spacing.xl,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.xl,
+    paddingHorizontal: Spacing.md,
   },
-  title: {
-    marginBottom: Spacing.xs,
+  headerBrand: {
+    color: Colors.electricTeal,
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  headerTitle: {
+    color: Colors.white,
   },
   subtitle: {
-    marginTop: Spacing.xs,
+    color: Colors.electricTeal,
   },
   infoButton: {
-    width: Spacing.xxxl,
-    height: Spacing.xxxl,
-    borderRadius: BorderRadius.xxl,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   marketPulseSection: {
     marginBottom: Spacing.xl,
@@ -1017,127 +835,151 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: Spacing.md,
     marginBottom: Spacing.md,
   },
   sectionTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+  },
+  marketCards: {
+    paddingHorizontal: Spacing.md,
+  },
+  marketCardOuter: {
+    width: MARKET_CARD_WIDTH,
+    marginRight: MARKET_CARD_GAP,
+    padding: Spacing.md,
+  },
+  marketHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.md,
+  },
+  changeIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pulsingDotContainer: {
-    width: Spacing.md,
-    height: Spacing.md,
+    width: 12,
+    height: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
   pulsingDotRing: {
     position: 'absolute',
-    width: Spacing.sm,
-    height: Spacing.sm,
-    borderRadius: Spacing.xs,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
   pulsingDotCore: {
-    width: Spacing.sm,
-    height: Spacing.sm,
-    borderRadius: Spacing.xs,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  marketCards: {
-    gap: MARKET_CARD_GAP,
-    paddingRight: Spacing.lg,
+  resourcesSection: {
+    marginBottom: Spacing.xl,
   },
-  marketCardOuter: {
-    width: MARKET_CARD_WIDTH,
+  resourcesList: {
+    paddingHorizontal: Spacing.md,
   },
-  marketHeader: {
+  resourceCard: {
+    width: 240,
+    marginRight: Spacing.md,
+    padding: Spacing.md,
+  },
+  resourceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
+    alignItems: 'flex-start',
+    marginBottom: Spacing.md,
   },
-  marketIcon: {
-    fontSize: 28,
-  },
-  changeIndicator: {
-    width: Spacing.lg,
-    height: Spacing.lg,
-    borderRadius: BorderRadius.md,
+  resourceIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  resourceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+  },
+  resourceType: {
+    ...Typography.bodySmall,
+    fontWeight: '700',
+    fontSize: 10,
+  },
   vehiclesSection: {
+    paddingHorizontal: Spacing.md,
     marginBottom: Spacing.xl,
   },
   vehiclesList: {
     gap: Spacing.md,
   },
   vehicleCardWrapper: {
-    borderRadius: BorderRadius.xl,
-    overflow: 'hidden',
+    marginBottom: Spacing.xs,
+  },
+  vehicleCard: {
+    padding: Spacing.lg,
   },
   vehicleCardGradient: {
+    borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
-    borderRadius: BorderRadius.xl,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
   },
   selectedGlowOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: BorderRadius.xl,
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: BorderRadius.lg,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 0,
+    shadowRadius: 10,
   },
   vehicleHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: Spacing.md,
-    gap: Spacing.md,
   },
   vehicleIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: BorderRadius.lg,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  vehicleEmoji: {
-    fontSize: 28,
+    marginRight: Spacing.md,
   },
   vehicleInfo: {
     flex: 1,
   },
   vehicleTopRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.xs,
+    marginBottom: 4,
   },
   verifiedBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 8,
   },
   vehicleStats: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: Spacing.md,
   },
   statItem: {
     flex: 1,
   },
   statDivider: {
     width: 1,
-    height: Spacing.xl,
+    height: 24,
+    marginHorizontal: Spacing.sm,
   },
   riskBadge: {
     flexDirection: 'row',
@@ -1145,9 +987,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   riskDot: {
-    width: Spacing.sm,
-    height: Spacing.sm,
-    borderRadius: Spacing.xs,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   projectionSection: {
     marginTop: Spacing.lg,
@@ -1158,33 +1000,16 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   chartContainer: {
-    marginBottom: Spacing.lg,
-  },
-  projectionResult: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Spacing.md,
-    paddingHorizontal: Spacing.sm,
+    height: 120,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
   },
-  projectionItem: {
-    flex: 1,
-  },
-  returnHighlight: {
-    flexDirection: 'row',
+  projectedValueContainer: {
     alignItems: 'center',
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
   },
-  disclaimerCardOuter: {
-    marginBottom: Spacing.lg,
-  },
-  disclaimerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
+  title: {
+    color: Colors.white,
   },
 });

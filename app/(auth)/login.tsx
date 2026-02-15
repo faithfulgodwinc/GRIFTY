@@ -10,18 +10,42 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Gradients } from '@/constants/Colors';
+import { getThemeColors, getGradients } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@fastshot/auth';
+import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
+import { Typography, Spacing, Shadows, BorderRadius } from '@/constants/Theme';
+import { GlassCard } from '@/components/GlassCard';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { signInWithGoogle, signInWithEmail, isLoading, error } = useAuth();
+  const { theme } = useTheme();
+  const Colors = getThemeColors(theme === 'dark');
+  const Gradients = getGradients(theme === 'dark');
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  // Handle incoming errors from redirects (e.g. Google Auth failure)
+  const params = useLocalSearchParams();
+
+  React.useEffect(() => {
+    if (params.error) {
+      const errorMessage = typeof params.error === 'string' ? params.error : 'Authentication failed';
+      Alert.alert(
+        'Sign In Failed',
+        `${errorMessage}. Please try again or use email sign in.`
+      );
+      // Optional: clear the error after showing it to prevent loop if they refresh? 
+      // Expo router doesn't strictly persist params on refresh usually, but good to be safe.
+      // For now, just showing the alert is sufficient "graceful" handling.
+    }
+  }, [params.error]);
 
   const handleEmailLogin = async () => {
     if (!email || !password) {
@@ -30,34 +54,67 @@ export default function LoginScreen() {
     }
 
     try {
+      setIsLoading(true);
+      setError(null);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await signInWithEmail(email, password);
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/(tabs)');
     } catch (err: any) {
       console.error('Email login error:', err);
+      setError(err);
       Alert.alert(
         'Login Failed',
         err.message || 'Unable to sign in. Please check your credentials and try again.'
       );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
+    Alert.alert('Coming Soon', 'Please sign in with your email and password instead.');
+    return;
+    /*
     try {
+      setIsLoading(true);
+      setError(null);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await signInWithGoogle();
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'grit://auth/callback',
+        },
+      });
+
+      if (error) throw error;
     } catch (err: any) {
       console.error('Google login error:', err);
+      setError(err);
       Alert.alert(
         'Google Sign-In Failed',
         'Unable to sign in with Google. Please try again or use email sign-in.'
       );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsLoading(false);
     }
+    */
   };
 
   return (
-    <LinearGradient colors={Gradients.hero} style={styles.container}>
+    <View style={[styles.container, { backgroundColor: Colors.background }]}>
+      <LinearGradient colors={Gradients.mesh} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -69,92 +126,96 @@ export default function LoginScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Welcome Back!</Text>
-            <Text style={styles.subtitle}>Sign in to continue your journey</Text>
+            <Text style={[Typography.displayMedium, styles.title, { color: Colors.primaryText }]}>Welcome Back!</Text>
+            <Text style={[Typography.bodyLarge, styles.subtitle, { color: Colors.secondaryText }]}>Sign in to continue your journey</Text>
           </View>
 
           {/* OAuth Buttons */}
           <TouchableOpacity
-            style={styles.oauthButton}
+            style={[styles.oauthButton, { backgroundColor: theme === 'dark' ? Colors.white : Colors.lightGray }]}
             onPress={handleGoogleLogin}
             disabled={isLoading}
             activeOpacity={0.8}
           >
             <View style={styles.oauthButtonInner}>
-              <Ionicons name="logo-google" size={24} color={Colors.primaryText} />
-              <Text style={styles.oauthButtonText}>Continue with Google</Text>
+              <Ionicons name="logo-google" size={24} color={Colors.richBlack} />
+              <Text style={[styles.oauthButtonText, { color: Colors.richBlack }]}>Continue with Google</Text>
             </View>
           </TouchableOpacity>
 
           {/* Divider */}
           <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
+            <View style={[styles.dividerLine, { backgroundColor: Colors.glassBorder }]} />
+            <Text style={[styles.dividerText, { color: Colors.tertiaryText }]}>or continue with email</Text>
+            <View style={[styles.dividerLine, { backgroundColor: Colors.glassBorder }]} />
           </View>
 
           {/* Email Form */}
           <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color={Colors.mediumGray} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={Colors.mediumGray}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                editable={!isLoading}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color={Colors.mediumGray} />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor={Colors.mediumGray}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                editable={!isLoading}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={Colors.mediumGray}
+            <GlassCard noPadding style={styles.glassInput}>
+              <View style={styles.inputContent}>
+                <Ionicons name="mail-outline" size={20} color={Colors.tertiaryText} />
+                <TextInput
+                  style={[styles.input, { color: Colors.primaryText }]}
+                  placeholder="Email"
+                  placeholderTextColor={Colors.tertiaryText}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!isLoading}
                 />
-              </TouchableOpacity>
-            </View>
+              </View>
+            </GlassCard>
+
+            <GlassCard noPadding style={styles.glassInput}>
+              <View style={styles.inputContent}>
+                <Ionicons name="lock-closed-outline" size={20} color={Colors.tertiaryText} />
+                <TextInput
+                  style={[styles.input, { color: Colors.primaryText }]}
+                  placeholder="Password"
+                  placeholderTextColor={Colors.tertiaryText}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  editable={!isLoading}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={Colors.tertiaryText}
+                  />
+                </TouchableOpacity>
+              </View>
+            </GlassCard>
 
             <Link href="/(auth)/forgot-password" asChild>
               <TouchableOpacity style={styles.forgotPassword}>
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                <Text style={[styles.forgotPasswordText, { color: Colors.electricTeal }]}>Forgot Password?</Text>
               </TouchableOpacity>
             </Link>
 
             {error && (
-              <View style={styles.errorContainer}>
+              <GlassCard style={[styles.errorContainer, { borderColor: 'rgba(244, 63, 94, 0.2)', backgroundColor: 'rgba(244, 63, 94, 0.1)' }]}>
                 <Ionicons name="alert-circle" size={20} color={Colors.radiantMagenta} />
-                <Text style={styles.errorText}>{error.message}</Text>
-              </View>
+                <Text style={[styles.errorText, { color: Colors.radiantMagenta }]}>{error.message}</Text>
+              </GlassCard>
             )}
 
             <TouchableOpacity
-              style={styles.signInButton}
+              style={[styles.signInButton, Shadows.glow(Colors.radiantMagenta)]}
               onPress={handleEmailLogin}
               disabled={isLoading}
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={[Colors.electricTeal, Colors.vibrantPurple]}
+                colors={Gradients.primary}
                 style={styles.signInGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Text style={styles.signInButtonText}>
+                <Text style={[styles.signInButtonText, { color: Colors.white }]}>
                   {isLoading ? 'Signing In...' : 'Sign In'}
                 </Text>
               </LinearGradient>
@@ -163,16 +224,16 @@ export default function LoginScreen() {
 
           {/* Sign Up Link */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don&apos;t have an account? </Text>
+            <Text style={[styles.footerText, { color: Colors.secondaryText }]}>Don&apos;t have an account? </Text>
             <Link href="/(auth)/signup" asChild>
               <TouchableOpacity>
-                <Text style={styles.footerLink}>Sign Up</Text>
+                <Text style={[styles.footerLink, { color: Colors.electricTeal }]}>Sign Up</Text>
               </TouchableOpacity>
             </Link>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -185,33 +246,23 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.xl,
     paddingTop: 80,
     paddingBottom: 40,
   },
   header: {
-    marginBottom: 40,
+    marginBottom: Spacing.xxl,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: Colors.white,
-    marginBottom: 8,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: 16,
-    color: Colors.white,
     opacity: 0.9,
   },
   oauthButton: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.xl,
+    ...Shadows.medium,
   },
   oauthButtonInner: {
     flexDirection: 'row',
@@ -221,89 +272,72 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   oauthButtonText: {
-    fontSize: 16,
+    ...Typography.titleMedium,
     fontWeight: '600',
-    color: Colors.primaryText,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.white,
-    opacity: 0.3,
   },
   dividerText: {
-    color: Colors.white,
-    opacity: 0.8,
     paddingHorizontal: 16,
-    fontSize: 14,
-    fontWeight: '500',
+    ...Typography.labelMedium,
   },
   form: {
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
-  inputContainer: {
+  glassInput: {
+    width: '100%',
+    marginBottom: Spacing.md,
+  },
+  inputContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    marginBottom: 16,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
     gap: 12,
   },
   input: {
     flex: 1,
-    fontSize: 16,
-    color: Colors.primaryText,
-    paddingVertical: 12,
+    ...Typography.bodyLarge,
+    paddingVertical: 0, // Remove vertical padding to let container handle height
+    height: 24, // Explicit height for text
   },
   forgotPassword: {
     alignSelf: 'flex-end',
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   forgotPasswordText: {
-    fontSize: 14,
-    color: Colors.white,
-    fontWeight: '600',
-    opacity: 0.9,
+    ...Typography.labelMedium,
   },
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(225, 29, 72, 0.1)',
-    borderRadius: 12,
+    borderWidth: 1,
     padding: 12,
-    marginBottom: 16,
+    marginBottom: Spacing.md,
     gap: 8,
   },
   errorText: {
     flex: 1,
-    fontSize: 14,
-    color: Colors.radiantMagenta,
-    fontWeight: '500',
+    ...Typography.bodyMedium,
   },
   signInButton: {
-    borderRadius: 16,
+    borderRadius: BorderRadius.round,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
   },
   signInGradient: {
     paddingVertical: 18,
     alignItems: 'center',
   },
   signInButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.white,
+    ...Typography.titleMedium,
+    fontWeight: '700',
   },
   footer: {
     flexDirection: 'row',
@@ -311,13 +345,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 14,
-    color: Colors.white,
-    opacity: 0.8,
+    ...Typography.bodyMedium,
   },
   footerLink: {
-    fontSize: 14,
-    color: Colors.white,
+    ...Typography.titleMedium,
     fontWeight: 'bold',
   },
 });

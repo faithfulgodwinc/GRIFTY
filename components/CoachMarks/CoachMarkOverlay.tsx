@@ -41,7 +41,8 @@ interface TooltipProps {
 }
 
 // ─── Glassmorphic Pointer/Beak ───────────────────────────────────────────────
-function TooltipBeak({
+// ─── Animated Pointer (Hand) ────────────────────────────────────────────────
+function AnimatedPointer({
   direction,
   position,
   isDark
@@ -51,44 +52,72 @@ function TooltipBeak({
   isDark: boolean;
 }) {
   const Colors = getThemeColors(isDark);
+  const bounceAnim = useRef(new Animated.Value(0)).current;
 
-  const beakStyle = position === 'top'
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bounceAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bounceAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  const translateY = bounceAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, position === 'top' ? -8 : 8],
+  });
+
+  const pointerStyle = position === 'top'
     ? {
-        position: 'absolute' as const,
-        left: SCREEN_WIDTH / 2 - Spacing.lg - 12,
-        top: -12,
-      }
-    : {
-        position: 'absolute' as const,
-        left: SCREEN_WIDTH / 2 - Spacing.lg - 12,
-        bottom: -12,
-      };
-
-  const getPoints = () => {
-    if (direction === 'down') {
-      return '12,0 24,20 0,20'; // Points down
-    } else {
-      return '0,0 24,0 12,20'; // Points up
+      position: 'absolute' as const,
+      left: SCREEN_WIDTH / 2 - 24, // Center align
+      top: -40, // Float above
+      transform: [{ translateY }],
+      zIndex: 10,
     }
-  };
+    : {
+      position: 'absolute' as const,
+      left: SCREEN_WIDTH / 2 - 24,
+      bottom: -40, // Float below
+      transform: [{ translateY }],
+      zIndex: 10,
+    };
+
+  // Determine icon based on position relative to tooltip
+  // If pointer is on TOP of tooltip, it should point DOWN (hand-down)
+  // If pointer is on BOTTOM of tooltip, it should point UP (hand-up)
+  // Rotating hand-left to point up/down is easier than finding exact match sometimes, 
+  // but let's use proper rotation.
+
+  const rotation = position === 'top' ? '-90deg' : '90deg';
 
   return (
-    <View style={beakStyle}>
-      <Svg width={24} height={20} viewBox="0 0 24 20">
-        <Defs>
-          <SvgRadialGradient id="beakGrad" cx="50%" cy="50%">
-            <Stop offset="0%" stopColor={isDark ? 'rgba(20, 10, 36, 0.98)' : 'rgba(255, 255, 255, 0.98)'} stopOpacity="1" />
-            <Stop offset="100%" stopColor={isDark ? 'rgba(20, 10, 36, 0.92)' : 'rgba(255, 255, 255, 0.92)'} stopOpacity="1" />
-          </SvgRadialGradient>
-        </Defs>
-        <Polygon
-          points={getPoints()}
-          fill="url(#beakGrad)"
-          stroke={isDark ? 'rgba(45, 212, 191, 0.3)' : 'rgba(20, 184, 166, 0.2)'}
-          strokeWidth={1.5}
+    <Animated.View style={pointerStyle}>
+      <View style={{ transform: [{ rotate: rotation }] }}>
+        <Ionicons
+          name="hand-left"
+          size={40}
+          color={Colors.electricTeal}
+          style={{
+            textShadowColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)',
+            textShadowOffset: { width: 0, height: 2 },
+            textShadowRadius: 4
+          }}
         />
-      </Svg>
-    </View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -193,21 +222,7 @@ function GlassmorphicTooltip({ step, currentIndex, totalSteps, onNext, onSkip, p
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     });
 
-    return () => {
-      // Smooth exit
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: positionConfig.beakDirection === 'down' ? 60 : -60,
-          duration: 280,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    };
+    // No exit animation to avoid conflict with next step's entry
   }, [step.id, positionConfig]);
 
   // Calculate tooltip position with tab bar boundary enforcement
@@ -221,13 +236,13 @@ function GlassmorphicTooltip({ step, currentIndex, totalSteps, onNext, onSkip, p
 
   const tooltipStyle = positionConfig.tooltipTop !== undefined
     ? {
-        top: Math.max(positionConfig.tooltipTop, insets.top + 20),
-        maxHeight: maxTooltipHeight,
-      }
+      top: Math.max(positionConfig.tooltipTop, insets.top + 20),
+      maxHeight: maxTooltipHeight,
+    }
     : {
-        bottom: Math.max(positionConfig.tooltipBottom || 0, MIN_BOTTOM_CLEARANCE),
-        maxHeight: maxTooltipHeight,
-      };
+      bottom: Math.max(positionConfig.tooltipBottom || 0, MIN_BOTTOM_CLEARANCE),
+      maxHeight: maxTooltipHeight,
+    };
 
   return (
     <Animated.View
@@ -252,8 +267,8 @@ function GlassmorphicTooltip({ step, currentIndex, totalSteps, onNext, onSkip, p
           },
         ]}
       >
-        {/* Glassmorphic Pointer/Beak */}
-        <TooltipBeak
+        {/* Animated Pointer */}
+        <AnimatedPointer
           direction={positionConfig.beakDirection}
           position={positionConfig.beakPosition}
           isDark={isDark}
@@ -778,7 +793,7 @@ function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip: () => 
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Text style={styles.welcomeEmoji}>✨</Text>
+                  <Ionicons name="sparkles" size={32} color={Colors.electricTeal} />
                 </LinearGradient>
               </View>
 
@@ -812,7 +827,7 @@ function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip: () => 
               </Text>
 
               {/* Start Button */}
-              <PressableScale onPress={onStart} scaleValue={0.96} style={{ width: '100%' }}>
+              <PressableScale onPress={onStart} scaleValue={0.96}>
                 <LinearGradient
                   colors={[Colors.electricTeal, Colors.glowingGreen]}
                   style={styles.welcomeButton}
@@ -969,15 +984,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  welcomeEmoji: {
-    fontSize: 40,
-  },
+
   welcomeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm + 2,
-    paddingVertical: Spacing.lg + 2,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xxl,
+    minWidth: 220,
     borderRadius: BorderRadius.xxl,
     ...Platform.select({
       ios: {

@@ -3,13 +3,14 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { AuthProvider } from '@fastshot/auth';
-import { supabase, cleanupSupabaseListeners } from '@/lib/supabase';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { cleanupSupabaseListeners } from '@/lib/supabase';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { FinancialDataProvider } from '@/contexts/FinancialDataContext';
 import { CoachMarksProvider } from '@/contexts/CoachMarksContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
+import { GlobalPaywallWrapper } from '@/components/premium/GlobalPaywallWrapper';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync().catch((error) => {
@@ -44,26 +45,29 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <AuthProvider
-          supabaseClient={supabase}
-          routes={{
-            login: '/(auth)/login',
-            afterLogin: '/(tabs)',
-          }}
-        >
+        <AuthProvider>
           <FinancialDataProvider>
             <CoachMarksProvider>
               <SubscriptionProvider>
                 <StatusBar style="auto" />
                 <Stack screenOptions={{ headerShown: false }}>
                   <Stack.Screen name="index" />
-                  <Stack.Screen name="onboarding" />
+                  <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
                   <Stack.Screen name="setup" />
-                  <Stack.Screen name="blueprint-setup" />
-                  <Stack.Screen name="(auth)" />
-                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen name="blueprint-setup" options={{ gestureEnabled: false }} />
+                  <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
+                  <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
                   <Stack.Screen name="auth/callback" />
+                  <Stack.Screen
+                    name="coach-chat"
+                    options={{
+                      presentation: 'modal',
+                      animation: 'slide_from_bottom',
+                      gestureEnabled: true
+                    }}
+                  />
                 </Stack>
+                <GlobalPaywallWrapper />
               </SubscriptionProvider>
             </CoachMarksProvider>
           </FinancialDataProvider>

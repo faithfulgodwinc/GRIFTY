@@ -14,12 +14,13 @@ import { Link } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Gradients } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@fastshot/auth';
+import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
-  const { resetPassword, isLoading, pendingPasswordReset } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [pendingPasswordReset, setPendingPasswordReset] = useState(false);
 
   const handleReset = async () => {
     if (!email) {
@@ -27,8 +28,25 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await resetPassword(email);
+    try {
+      setIsLoading(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://gritify.fastshot.ai/auth/callback', // Updated to generic or custom scheme if needed
+      });
+
+      if (error) throw error;
+
+      setPendingPasswordReset(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err: any) {
+      console.error('Reset password error:', err);
+      Alert.alert('Error', err.message || 'Failed to send reset email.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (pendingPasswordReset) {
